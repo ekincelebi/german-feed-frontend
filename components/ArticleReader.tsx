@@ -1,10 +1,10 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import type { ArticleDetail, VocabularyWord } from '@/lib/types'
 import VocabularyPopup from './VocabularyPopup'
 import GrammarSidebar from './GrammarSidebar'
-import { Play, Bookmark, ThumbsUp, ThumbsDown, Check } from 'lucide-react'
+import { Play, Pause, Bookmark, ThumbsUp, ThumbsDown, Check } from 'lucide-react'
 
 type ArticleReaderProps = {
   article: ArticleDetail
@@ -23,8 +23,8 @@ function highlightVocabulary(content: string, vocabulary: VocabularyWord[]): { c
     // Escape special regex characters
     const escapedWord = vocab.word.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
 
-    // Match whole words only, case-insensitive
-    const regex = new RegExp(`\\b${escapedWord}\\b`, 'gi')
+    // Match whole words only, case-insensitive (only first occurrence)
+    const regex = new RegExp(`\\b${escapedWord}\\b`, 'i')
 
     // Replace with highlighted version and map to vocab entry
     highlightedContent = highlightedContent.replace(regex, (match) => {
@@ -42,6 +42,11 @@ export default function ArticleReader({ article, level }: ArticleReaderProps) {
   const [popupPosition, setPopupPosition] = useState({ x: 0, y: 0 })
   const [isRead, setIsRead] = useState(false)
   const [isSaved, setIsSaved] = useState(false)
+  const [isPlaying, setIsPlaying] = useState(false)
+  const [isLoadingAudio, setIsLoadingAudio] = useState(false)
+  const [audioDuration, setAudioDuration] = useState<number>(0)
+  const [currentTime, setCurrentTime] = useState<number>(0)
+  const audioRef = useRef<HTMLAudioElement | null>(null)
 
   const { content: highlightedContent, vocabMap } = highlightVocabulary(article.cleaned_content, article.vocabulary)
 
@@ -111,6 +116,95 @@ export default function ArticleReader({ article, level }: ArticleReaderProps) {
     })
   }
 
+  const formatTime = (seconds: number) => {
+    const mins = Math.floor(seconds / 60)
+    const secs = Math.floor(seconds % 60)
+    return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`
+  }
+
+  const handlePlayAudio = async () => {
+    // If audio is already playing, pause it
+    if (isPlaying && audioRef.current) {
+      audioRef.current.pause()
+      setIsPlaying(false)
+      return
+    }
+
+    // If we already have audio loaded, just play it
+    if (audioRef.current && audioRef.current.src) {
+      audioRef.current.play()
+      setIsPlaying(true)
+      return
+    }
+
+    // Otherwise, fetch the audio from the API
+    try {
+      setIsLoadingAudio(true)
+
+      const response = await fetch('/api/tts', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          text: article.cleaned_content,
+        }),
+      })
+
+      if (!response.ok) {
+        throw new Error('Failed to generate audio')
+      }
+
+      const audioBlob = await response.blob()
+      const audioUrl = URL.createObjectURL(audioBlob)
+
+      // Create audio element
+      const audio = new Audio(audioUrl)
+      audioRef.current = audio
+
+      // Set up event listeners
+      audio.addEventListener('loadedmetadata', () => {
+        setAudioDuration(audio.duration)
+      })
+
+      audio.addEventListener('timeupdate', () => {
+        setCurrentTime(audio.currentTime)
+      })
+
+      audio.addEventListener('ended', () => {
+        setIsPlaying(false)
+        setCurrentTime(0)
+      })
+
+      audio.addEventListener('play', () => {
+        setIsPlaying(true)
+      })
+
+      audio.addEventListener('pause', () => {
+        setIsPlaying(false)
+      })
+
+      // Play the audio
+      await audio.play()
+      setIsPlaying(true)
+    } catch (error) {
+      console.error('Error playing audio:', error)
+      alert('Failed to generate audio. Please try again.')
+    } finally {
+      setIsLoadingAudio(false)
+    }
+  }
+
+  // Cleanup audio on unmount
+  useEffect(() => {
+    return () => {
+      if (audioRef.current) {
+        audioRef.current.pause()
+        audioRef.current.src = ''
+      }
+    }
+  }, [])
+
   return (
     <div className="max-w-7xl mx-auto">
       {/* Header */}
@@ -158,9 +252,27 @@ export default function ArticleReader({ article, level }: ArticleReaderProps) {
       <div className="bg-white border-2 border-gray-200 rounded-lg p-6 mb-8">
         <div className="flex items-center justify-center gap-6 flex-wrap">
           {/* Listen Button */}
-          <button className="flex items-center gap-2 px-4 py-2 text-gray-700 hover:text-blue-600 font-medium transition-colors">
-            <Play className="h-5 w-5" />
-            <span className="text-sm">Anhören</span>
+          <button
+            onClick={handlePlayAudio}
+            disabled={isLoadingAudio}
+            className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-full font-medium transition-all hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed shadow-sm"
+          >
+            {isLoadingAudio ? (
+              <>
+                <div className="h-5 w-5 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                <span className="text-sm">Lädt...</span>
+              </>
+            ) : isPlaying ? (
+              <>
+                <Pause className="h-5 w-5" />
+                <span className="text-sm">Hören {formatTime(currentTime)}</span>
+              </>
+            ) : (
+              <>
+                <Play className="h-5 w-5" />
+                <span className="text-sm">Hören {audioDuration > 0 ? formatTime(audioDuration) : ''}</span>
+              </>
+            )}
           </button>
 
           {/* Bookmark Button */}
