@@ -1,65 +1,77 @@
-// CEFR Levels
-export const CEFR_LEVELS = ['A1', 'A2', 'B1', 'B2', 'C1', 'C2'] as const
-export type CEFRLevel = typeof CEFR_LEVELS[number]
-
-// Vocabulary word structure
-export type VocabularyWord = {
-  word: string
-  artikel: string | null  // "der", "die", "das", or null for verbs
-  english: string
-  plural: string | null
-}
-
-// Article list item (from article_list_view)
-export type ArticleListItem = {
+// Core Article Type
+export interface Article {
   id: string
   title: string
   url: string
-  published_date: string
-  source_domain: string
-  language_level: CEFRLevel
-  topics: string[]
-  word_count_after: number
+  source_name: string
+  published_at: string
+  theme: string | null
   created_at: string
 }
 
-// Article detail (from article_detail_view)
-export type ArticleDetail = {
+// Processed Content Type
+export interface ProcessedContent {
   id: string
-  url: string
-  title: string
-  published_date: string
-  author: string | null
-  source_domain: string
-  language_level: CEFRLevel
-  topics: string[]
-  vocabulary: VocabularyWord[]
-  grammar_patterns: string[]
+  article_id: string
   cleaned_content: string
-  word_count_after: number
+  summary: string
+  reading_level: string
+  processing_tokens: number
+  processing_cost_usd: number
+  model_used: string
   created_at: string
 }
 
-// Statistics (from article_statistics view)
-export type ArticleStatistics = {
-  total_articles: number
-  level_a1_count: number
-  level_a2_count: number
-  level_b1_count: number
-  level_b2_count: number
-  level_c1_count: number
-  level_c2_count: number
-  avg_word_count: number
+// Vocabulary Item Type
+export interface VocabularyItem {
+  word: string
+  article: string | null        // "der" | "die" | "das" for nouns
+  plural: string | null          // Plural form for nouns
+  context: string                // Sentence from article
+  english_translation: string
+  german_explanation: string     // Simple German definition
+  cefr_level: string            // "A2" | "B1" | "B2" | "C1"
 }
 
-// Topic with count (from get_unique_topics function)
-export type TopicWithCount = {
-  topic: string
-  count: number
+// Grammar Pattern Type
+export interface GrammarPattern {
+  pattern: string                // e.g., "Perfekt tense"
+  example: string                // Sentence from article
+  explanation: string            // German explanation
 }
 
-// Domain with count (from get_unique_domains function)
-export type DomainWithCount = {
-  domain: string
-  count: number
+// Comprehension Question Type
+export interface ComprehensionQuestion {
+  question: string               // Question in German
+  type?: string                  // Optional: "main_idea" | "detail" | "inference"
+}
+
+// Learning Enhancements Type
+export interface LearningEnhancements {
+  id: string
+  article_id: string
+  vocabulary_annotations: VocabularyItem[]
+  grammar_patterns: GrammarPattern[]
+  cultural_notes: string[]
+  comprehension_questions: ComprehensionQuestion[]
+  estimated_difficulty: 'A2' | 'B1' | 'B2' | 'C1' | 'C2'
+  estimated_reading_time: number  // minutes
+  processing_tokens: number
+  processing_cost_usd: number
+  model_used: string
+  created_at: string
+  updated_at: string
+}
+
+// Complete Article for Display
+export interface LearningArticle {
+  id: string
+  title: string
+  url: string
+  source_name: string
+  published_at: string
+  theme: string | null
+  created_at: string
+  processed_content: ProcessedContent
+  learning_enhancements: LearningEnhancements
 }

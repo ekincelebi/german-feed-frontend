@@ -1,5 +1,7 @@
+import type { GrammarPattern } from '@/lib/types'
+
 type GrammarSidebarProps = {
-  grammarPatterns: string[]
+  grammarPatterns: GrammarPattern[]
 }
 
 export default function GrammarSidebar({ grammarPatterns }: GrammarSidebarProps) {
@@ -8,20 +10,33 @@ export default function GrammarSidebar({ grammarPatterns }: GrammarSidebarProps)
   }
 
   return (
-    <aside className="lg:sticky lg:top-4 bg-blue-50 border-2 border-blue-200 rounded-lg p-6">
-      <h3 className="text-xl font-bold mb-4 text-gray-900">
-        Grammar Patterns
-      </h3>
-      <ul className="space-y-3">
+    <section className="bg-white border-2 border-gray-200 rounded-lg p-6 mb-8">
+      <h2 className="text-2xl font-bold mb-6 text-gray-900 flex items-center gap-2">
+        <span>📝</span>
+        Grammatikstrukturen
+        <span className="text-sm font-normal text-gray-600">(Grammar Patterns)</span>
+      </h2>
+      <div className="space-y-4">
         {grammarPatterns.map((pattern, index) => (
-          <li
+          <div
             key={index}
-            className="text-sm text-gray-900 font-medium pl-4 border-l-3 border-blue-600"
+            className="border-l-4 border-blue-600 bg-gray-50 rounded-r-lg p-4"
           >
-            {pattern}
-          </li>
+            <h3 className="text-lg font-bold text-blue-700 mb-2">
+              {pattern.pattern}
+            </h3>
+            <div className="bg-white rounded p-3 mb-3 border border-gray-200">
+              <div className="flex items-start gap-2">
+                <span className="text-blue-600 font-semibold">💡</span>
+                <p className="text-gray-900 italic">"{pattern.example}"</p>
+              </div>
+            </div>
+            <p className="text-gray-700 text-sm leading-relaxed">
+              {pattern.explanation}
+            </p>
+          </div>
         ))}
-      </ul>
-    </aside>
+      </div>
+    </section>
   )
 }

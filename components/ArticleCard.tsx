@@ -1,16 +1,23 @@
 'use client'
 
 import Link from 'next/link'
-import type { ArticleListItem } from '@/lib/types'
-import { Bookmark, Check } from 'lucide-react'
+import type { LearningArticle } from '@/lib/types'
+import { Bookmark, Check, Clock, BookOpen } from 'lucide-react'
 import { useState, useEffect } from 'react'
 
 type ArticleCardProps = {
-  article: ArticleListItem
-  level: string
+  article: LearningArticle
 }
 
-export default function ArticleCard({ article, level }: ArticleCardProps) {
+const difficultyColors = {
+  'A2': 'bg-green-100 text-green-800 border-green-200',
+  'B1': 'bg-blue-100 text-blue-800 border-blue-200',
+  'B2': 'bg-orange-100 text-orange-800 border-orange-200',
+  'C1': 'bg-red-100 text-red-800 border-red-200',
+  'C2': 'bg-purple-100 text-purple-800 border-purple-200',
+}
+
+export default function ArticleCard({ article }: ArticleCardProps) {
   const [isRead, setIsRead] = useState(false)
   const [isSaved, setIsSaved] = useState(false)
 
@@ -57,84 +64,85 @@ export default function ArticleCard({ article, level }: ArticleCardProps) {
 
     localStorage.setItem('savedArticles', JSON.stringify(savedArticles))
     setIsSaved(newSavedState)
+
+    // Dispatch custom event to notify HomePage
+    window.dispatchEvent(new Event('savedArticlesUpdated'))
   }
 
   const formatDate = (dateString: string) => {
-    return new Date(dateString).toLocaleDateString('en-US', {
+    return new Date(dateString).toLocaleDateString('de-DE', {
       year: 'numeric',
       month: 'short',
       day: 'numeric',
     })
   }
 
+  const difficulty = article.learning_enhancements.estimated_difficulty
+  const readingTime = article.learning_enhancements.estimated_reading_time
+
   return (
-    <div className="bg-white border-2 border-gray-200 rounded-lg p-6 hover:shadow-xl hover:border-blue-300 transition-all duration-200 relative">
-      {/* Status Icons */}
-      <div className="absolute top-4 right-4 flex gap-2">
-        <button
-          onClick={toggleSaved}
-          className={`p-2 rounded-lg transition-colors ${
-            isSaved
-              ? 'bg-blue-100 text-blue-600 hover:bg-blue-200'
-              : 'text-gray-400 hover:bg-gray-100 hover:text-gray-600'
-          }`}
-          title={isSaved ? 'Saved' : 'Save article'}
-        >
-          <Bookmark className="h-5 w-5" fill={isSaved ? 'currentColor' : 'none'} />
-        </button>
-        <button
-          onClick={toggleRead}
-          className={`p-2 rounded-lg transition-colors ${
-            isRead
-              ? 'bg-green-100 text-green-600 hover:bg-green-200'
-              : 'text-gray-400 hover:bg-gray-100 hover:text-gray-600'
-          }`}
-          title={isRead ? 'Marked as read' : 'Mark as read'}
-        >
-          <Check className="h-5 w-5" strokeWidth={isRead ? 3 : 2} />
-        </button>
-      </div>
+    <Link href={`/articles/${article.id}`}>
+      <div className="bg-white border-2 border-gray-200 rounded-lg p-6 hover:shadow-xl hover:border-blue-300 transition-all duration-200 relative h-full flex flex-col">
+        {/* Status Icons */}
+        <div className="absolute top-4 right-4 flex gap-2">
+          <button
+            onClick={toggleSaved}
+            className={`p-2 rounded-lg transition-colors ${
+              isSaved
+                ? 'bg-blue-100 text-blue-600 hover:bg-blue-200'
+                : 'text-gray-400 hover:bg-gray-100 hover:text-gray-600'
+            }`}
+            title={isSaved ? 'Saved' : 'Save article'}
+          >
+            <Bookmark className="h-5 w-5" fill={isSaved ? 'currentColor' : 'none'} />
+          </button>
+          <button
+            onClick={toggleRead}
+            className={`p-2 rounded-lg transition-colors ${
+              isRead
+                ? 'bg-green-100 text-green-600 hover:bg-green-200'
+                : 'text-gray-400 hover:bg-gray-100 hover:text-gray-600'
+            }`}
+            title={isRead ? 'Marked as read' : 'Mark as read'}
+          >
+            <Check className="h-5 w-5" strokeWidth={isRead ? 3 : 2} />
+          </button>
+        </div>
 
-      {/* Title */}
-      <h3 className="text-xl font-bold mb-3 text-gray-900 line-clamp-2 pr-24">
-        {article.title}
-      </h3>
+        {/* Title */}
+        <h3 className="text-xl font-bold mb-3 text-gray-900 line-clamp-2 pr-24">
+          {article.title}
+        </h3>
 
-      {/* Metadata */}
-      <div className="flex flex-wrap items-center gap-2 text-sm text-gray-700 mb-3 font-medium">
-        <span>{article.source_domain}</span>
-        <span>•</span>
-        <span>{formatDate(article.published_date)}</span>
-        <span>•</span>
-        <span>{article.word_count_after} words</span>
-      </div>
-
-      {/* Topics */}
-      {article.topics && article.topics.length > 0 && (
-        <div className="flex flex-wrap gap-2 mb-4">
-          {article.topics.slice(0, 3).map((topic) => (
-            <span
-              key={topic}
-              className="px-3 py-1 text-xs font-semibold bg-blue-100 text-blue-800 rounded-full"
-            >
-              {topic}
-            </span>
-          ))}
-          {article.topics.length > 3 && (
-            <span className="px-3 py-1 text-xs font-semibold text-gray-600">
-              +{article.topics.length - 3} more
+        {/* Metadata Badges */}
+        <div className="flex flex-wrap items-center gap-2 mb-3">
+          <span className={`inline-flex items-center gap-1 px-3 py-1 text-xs font-semibold border rounded-full ${difficultyColors[difficulty]}`}>
+            <BookOpen className="h-3 w-3" />
+            {difficulty}
+          </span>
+          <span className="inline-flex items-center gap-1 px-3 py-1 text-xs font-semibold bg-gray-100 text-gray-800 border border-gray-200 rounded-full">
+            <Clock className="h-3 w-3" />
+            {readingTime} min
+          </span>
+          {article.theme && (
+            <span className="px-3 py-1 text-xs font-semibold bg-purple-100 text-purple-800 border border-purple-200 rounded-full">
+              {article.theme}
             </span>
           )}
         </div>
-      )}
 
-      {/* Read Button */}
-      <Link
-        href={`/articles/${level}/${article.id}`}
-        className="inline-block px-5 py-2.5 bg-blue-600 hover:bg-blue-700 text-white font-semibold rounded-lg transition-colors duration-200"
-      >
-        Read Article
-      </Link>
-    </div>
+        {/* Source & Date */}
+        <div className="flex flex-wrap items-center gap-2 text-sm text-gray-600 mb-4">
+          <span className="font-medium">{article.source_name}</span>
+          <span>•</span>
+          <span>{formatDate(article.published_at)}</span>
+        </div>
+
+        {/* Preview Text */}
+        <p className="text-gray-700 text-sm mb-4 line-clamp-3 flex-grow">
+          {article.processed_content.summary || article.processed_content.cleaned_content.substring(0, 150) + '...'}
+        </p>
+      </div>
+    </Link>
   )
 }
