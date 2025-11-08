@@ -10,8 +10,11 @@ export default function HomePage() {
   const [showSavedOnly, setShowSavedOnly] = useState(false)
   const [learningArticles, setLearningArticles] = useState<LearningArticle[]>([])
   const [savedArticleIds, setSavedArticleIds] = useState<string[]>([])
+  const [currentPage, setCurrentPage] = useState(1)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+
+  const ARTICLES_PER_PAGE = 15
 
   // Load saved articles from localStorage
   useEffect(() => {
@@ -24,7 +27,12 @@ export default function HomePage() {
       setLoading(true)
       setError(null)
 
-      // Fetch articles with all learning enhancements
+      // Calculate date 3 days ago
+      const threeDaysAgo = new Date()
+      threeDaysAgo.setDate(threeDaysAgo.getDate() - 3)
+      const threeDaysAgoISO = threeDaysAgo.toISOString()
+
+      // Fetch articles with all learning enhancements from last 3 days
       const { data: articles, error: fetchError } = await supabase
         .from('articles')
         .select(`
@@ -36,8 +44,8 @@ export default function HomePage() {
           processed_content!inner(*),
           learning_enhancements!inner(*)
         `)
+        .gte('created_at', threeDaysAgoISO)
         .order('created_at', { ascending: false })
-        .limit(20)
 
       if (fetchError) {
         console.error('Error fetching articles:', fetchError)
@@ -136,6 +144,17 @@ export default function HomePage() {
     filteredArticles = filteredArticles.filter(article => article.theme === selectedTheme)
   }
 
+  // Pagination
+  const totalPages = Math.ceil(filteredArticles.length / ARTICLES_PER_PAGE)
+  const startIndex = (currentPage - 1) * ARTICLES_PER_PAGE
+  const endIndex = startIndex + ARTICLES_PER_PAGE
+  const paginatedArticles = filteredArticles.slice(startIndex, endIndex)
+
+  // Reset to page 1 when filters change
+  useEffect(() => {
+    setCurrentPage(1)
+  }, [selectedTheme, showSavedOnly])
+
   const getThemeDisplay = (theme: string): string => {
     if (theme === 'All') return 'All'
     return themeDisplayMap[theme] || theme
@@ -216,11 +235,55 @@ export default function HomePage() {
             <p className="text-gray-600">No articles found</p>
           </div>
         ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {filteredArticles.map((article) => (
-              <ArticleCard key={article.id} article={article} />
-            ))}
-          </div>
+          <>
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mb-8">
+              {paginatedArticles.map((article) => (
+                <ArticleCard key={article.id} article={article} />
+              ))}
+            </div>
+
+            {/* Pagination Controls */}
+            {totalPages > 1 && (
+              <div className="flex justify-center items-center gap-2 mt-8">
+                <button
+                  onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))}
+                  disabled={currentPage === 1}
+                  className="px-4 py-2 rounded-lg font-medium transition-all disabled:opacity-50 disabled:cursor-not-allowed bg-white text-gray-700 border-2 border-gray-200 hover:border-blue-300 hover:shadow-sm disabled:hover:border-gray-200"
+                >
+                  Previous
+                </button>
+
+                <div className="flex gap-2">
+                  {Array.from({ length: totalPages }, (_, i) => i + 1).map((page) => (
+                    <button
+                      key={page}
+                      onClick={() => setCurrentPage(page)}
+                      className={`px-4 py-2 rounded-lg font-medium transition-all ${
+                        currentPage === page
+                          ? 'bg-blue-600 text-white shadow-md'
+                          : 'bg-white text-gray-700 border-2 border-gray-200 hover:border-blue-300 hover:shadow-sm'
+                      }`}
+                    >
+                      {page}
+                    </button>
+                  ))}
+                </div>
+
+                <button
+                  onClick={() => setCurrentPage(prev => Math.min(totalPages, prev + 1))}
+                  disabled={currentPage === totalPages}
+                  className="px-4 py-2 rounded-lg font-medium transition-all disabled:opacity-50 disabled:cursor-not-allowed bg-white text-gray-700 border-2 border-gray-200 hover:border-blue-300 hover:shadow-sm disabled:hover:border-gray-200"
+                >
+                  Next
+                </button>
+              </div>
+            )}
+
+            {/* Article count info */}
+            <div className="text-center mt-4 text-sm text-gray-600">
+              Showing {startIndex + 1}-{Math.min(endIndex, filteredArticles.length)} of {filteredArticles.length} articles
+            </div>
+          </>
         )}
       </div>
     </div>
