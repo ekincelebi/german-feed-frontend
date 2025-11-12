@@ -27,12 +27,12 @@ export default function HomePage() {
       setLoading(true)
       setError(null)
 
-      // Calculate date 3 days ago
-      const threeDaysAgo = new Date()
-      threeDaysAgo.setDate(threeDaysAgo.getDate() - 3)
-      const threeDaysAgoISO = threeDaysAgo.toISOString()
+      // Calculate date 7 days ago
+      const sevenDaysAgo = new Date()
+      sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7)
+      const sevenDaysAgoISO = sevenDaysAgo.toISOString()
 
-      // Fetch articles with all learning enhancements from last 3 days
+      // Fetch articles with all learning enhancements from last 7 days
       const { data: articles, error: fetchError } = await supabase
         .from('articles')
         .select(`
@@ -44,7 +44,7 @@ export default function HomePage() {
           processed_content!inner(*),
           learning_enhancements!inner(*)
         `)
-        .gte('created_at', threeDaysAgoISO)
+        .gte('created_at', sevenDaysAgoISO)
         .order('created_at', { ascending: false })
 
       if (fetchError) {

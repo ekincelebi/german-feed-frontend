@@ -2,14 +2,25 @@
 
 import { useState, useEffect, useRef } from 'react'
 import type { LearningArticle } from '@/lib/types'
-import GrammarSidebar from './GrammarSidebar'
-import CulturalNotes from './CulturalNotes'
-import ComprehensionQuestions from './ComprehensionQuestions'
-import { Play, Pause, Bookmark, Check, Clock, BookOpen, ArrowLeft } from 'lucide-react'
+import { Play, Pause, Bookmark, Check, Clock, BookOpen, ArrowLeft, X } from 'lucide-react'
 import Link from 'next/link'
 
 type ArticleReaderProps = {
   article: LearningArticle
+}
+
+export interface Highlight {
+  id: string
+  text: string
+  color: string
+  startIndex: number
+  endIndex: number
+  explanation?: {
+    word: string
+    meaning: string
+    grammar: string
+    example: string
+  }
 }
 
 const difficultyColors = {
@@ -20,16 +31,14 @@ const difficultyColors = {
   'C2': 'bg-purple-100 text-purple-800',
 }
 
-function formatContent(content: string): string {
-  // Convert line breaks to <br> tags if not already HTML
-  let formattedContent = content
-  if (!content.includes('<p>') && !content.includes('<br>')) {
-    formattedContent = content.replace(/\n\n/g, '</p><p>').replace(/\n/g, '<br>')
-    formattedContent = `<p>${formattedContent}</p>`
-  }
-
-  return formattedContent
-}
+const highlightColors = [
+  { name: 'Yellow', value: '#fef08a' },
+  { name: 'Green', value: '#bbf7d0' },
+  { name: 'Blue', value: '#bae6fd' },
+  { name: 'Pink', value: '#fbcfe8' },
+  { name: 'Purple', value: '#e9d5ff' },
+  { name: 'Orange', value: '#fed7aa' },
+]
 
 export default function ArticleReader({ article }: ArticleReaderProps) {
   const [isRead, setIsRead] = useState(false)
@@ -40,36 +49,14 @@ export default function ArticleReader({ article }: ArticleReaderProps) {
   const [currentTime, setCurrentTime] = useState<number>(0)
   const audioRef = useRef<HTMLAudioElement | null>(null)
 
-  // Ensure all learning enhancements are arrays
-  // Handle both array format and potential JSON string format
-  const parseIfNeeded = (data: any): any[] => {
-    if (Array.isArray(data)) return data
-    if (typeof data === 'string') {
-      try {
-        const parsed = JSON.parse(data)
-        return Array.isArray(parsed) ? parsed : []
-      } catch {
-        return []
-      }
-    }
-    return []
-  }
+  // Highlighting state
+  const [selectedColor, setSelectedColor] = useState<string>('')
+  const [highlights, setHighlights] = useState<Highlight[]>([])
+  const [showExplanations, setShowExplanations] = useState(false)
+  const [isLoadingExplanations, setIsLoadingExplanations] = useState(false)
+  const contentRef = useRef<HTMLDivElement>(null)
 
-  const vocabularyAnnotations = parseIfNeeded(article.learning_enhancements.vocabulary_annotations)
-  const grammarPatterns = parseIfNeeded(article.learning_enhancements.grammar_patterns)
-  const culturalNotes = parseIfNeeded(article.learning_enhancements.cultural_notes)
-  const comprehensionQuestions = parseIfNeeded(article.learning_enhancements.comprehension_questions)
-
-  // Debug logging
-  console.log('Learning enhancements data:', {
-    vocabCount: vocabularyAnnotations.length,
-    grammarCount: grammarPatterns.length,
-    culturalCount: culturalNotes.length,
-    questionsCount: comprehensionQuestions.length,
-    rawData: article.learning_enhancements
-  })
-
-  const formattedContent = formatContent(article.processed_content.cleaned_content)
+  const articleContent = article.processed_content.cleaned_content
 
   // Load states from localStorage
   useEffect(() => {
@@ -208,6 +195,239 @@ export default function ArticleReader({ article }: ArticleReaderProps) {
     }
   }, [])
 
+  // Highlighting handlers
+  const handleColorClick = (color: string) => {
+    if (selectedColor === color) {
+      setSelectedColor('')
+    } else {
+      setSelectedColor(color)
+    }
+  }
+
+  const handleMouseUp = () => {
+    if (!selectedColor) return
+
+    const selection = window.getSelection()
+    if (!selection || selection.isCollapsed) return
+
+    const selectedText = selection.toString()
+    if (!selectedText || !selectedText.trim()) return
+
+    const range = selection.getRangeAt(0)
+    const preSelectionRange = range.cloneRange()
+
+    if (!contentRef.current) return
+
+    preSelectionRange.selectNodeContents(contentRef.current)
+    preSelectionRange.setEnd(range.startContainer, range.startOffset)
+
+    const startIndex = preSelectionRange.toString().length
+    const endIndex = startIndex + selectedText.length
+
+    // Check for overlaps
+    const overlaps = highlights.some(h =>
+      (startIndex >= h.startIndex && startIndex < h.endIndex) ||
+      (endIndex > h.startIndex && endIndex <= h.endIndex) ||
+      (startIndex <= h.startIndex && endIndex >= h.endIndex)
+    )
+
+    if (overlaps) {
+      alert('This selection overlaps with an existing highlight!')
+      selection.removeAllRanges()
+      return
+    }
+
+    const newHighlight: Highlight = {
+      id: `highlight-${Date.now()}`,
+      text: selectedText.trim(),
+      color: selectedColor,
+      startIndex,
+      endIndex,
+    }
+
+    setHighlights([...highlights, newHighlight])
+    selection.removeAllRanges()
+  }
+
+  const handleRemoveHighlight = (id: string) => {
+    setHighlights(highlights.filter(h => h.id !== id))
+  }
+
+  const handleNavigateToHighlight = (highlightId: string) => {
+    const element = document.getElementById(highlightId)
+    if (element) {
+      element.scrollIntoView({ behavior: 'smooth', block: 'center' })
+      element.classList.add('animate-pulse')
+      setTimeout(() => {
+        element.classList.remove('animate-pulse')
+      }, 1000)
+    }
+  }
+
+  const handleExplainClick = async () => {
+    // Count highlights without explanations
+    const highlightsNeedingExplanations = highlights.filter(h => !h.explanation)
+
+    if (highlights.length === 0) {
+      alert('Please highlight some text first!')
+      return
+    }
+
+    // If no new highlights to process, just toggle the panel
+    if (highlightsNeedingExplanations.length === 0) {
+      setShowExplanations(!showExplanations)
+      return
+    }
+
+    // Process new explanations
+    setIsLoadingExplanations(true)
+
+    // Show the panel if it's not already visible
+    if (!showExplanations) {
+      setShowExplanations(true)
+    }
+
+    try {
+      const response = await fetch('/api/explain', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          text: articleContent,
+          phrases: highlightsNeedingExplanations.map(h => h.text)
+        })
+      })
+
+      if (!response.ok) throw new Error('Failed to get explanations')
+
+      const explanations = await response.json()
+
+      // Update only the highlights that didn't have explanations
+      setHighlights(highlights.map(h => {
+        if (!h.explanation) {
+          const exp = explanations.find((e: any) => e.phrase === h.text)
+          if (exp) {
+            return { ...h, explanation: exp.explanation }
+          }
+        }
+        return h
+      }))
+    } catch (error) {
+      console.error('Error getting explanations:', error)
+      alert('Failed to get explanations. Please try again.')
+    } finally {
+      setIsLoadingExplanations(false)
+    }
+  }
+
+  // Format text with markdown-like syntax (bold, italic)
+  const formatText = (text: string) => {
+    if (!text) return null
+
+    const parts: React.ReactNode[] = []
+    let lastIndex = 0
+
+    // Pattern to match **bold**, *italic*, and newlines
+    const pattern = /(\*\*[^*]+\*\*|\*[^*]+\*)/g
+    let match
+
+    while ((match = pattern.exec(text)) !== null) {
+      // Add text before the match
+      if (match.index > lastIndex) {
+        const beforeText = text.substring(lastIndex, match.index)
+        parts.push(...beforeText.split('\n').flatMap((line, i, arr) =>
+          i < arr.length - 1 ? [line, <br key={`br-${lastIndex}-${i}`} />] : [line]
+        ))
+      }
+
+      const matchedText = match[0]
+
+      // Handle **bold**
+      if (matchedText.startsWith('**') && matchedText.endsWith('**')) {
+        const boldText = matchedText.slice(2, -2)
+        parts.push(<strong key={`bold-${match.index}`} className="font-bold">{boldText}</strong>)
+      }
+      // Handle *italic*
+      else if (matchedText.startsWith('*') && matchedText.endsWith('*')) {
+        const italicText = matchedText.slice(1, -1)
+        parts.push(<em key={`italic-${match.index}`} className="italic">{italicText}</em>)
+      }
+
+      lastIndex = pattern.lastIndex
+    }
+
+    // Add remaining text
+    if (lastIndex < text.length) {
+      const remainingText = text.substring(lastIndex)
+      parts.push(...remainingText.split('\n').flatMap((line, i, arr) =>
+        i < arr.length - 1 ? [line, <br key={`br-end-${i}`} />] : [line]
+      ))
+    }
+
+    return <>{parts}</>
+  }
+
+  const renderHighlightedText = () => {
+    if (highlights.length === 0) {
+      return articleContent
+    }
+
+    const sortedHighlights = [...highlights].sort((a, b) => a.startIndex - b.startIndex)
+    const elements: React.ReactElement[] = []
+    let lastIndex = 0
+
+    sortedHighlights.forEach((highlight, idx) => {
+      if (highlight.startIndex > lastIndex) {
+        elements.push(
+          <span key={`text-${idx}`}>
+            {articleContent.substring(lastIndex, highlight.startIndex)}
+          </span>
+        )
+      }
+
+      elements.push(
+        <mark
+          key={highlight.id}
+          id={highlight.id}
+          className="relative group rounded-sm transition-all cursor-pointer hover:opacity-80"
+          style={{
+            backgroundColor: highlight.color,
+            padding: 0,
+            margin: 0
+          }}
+          onClick={(e) => {
+            e.stopPropagation()
+            handleRemoveHighlight(highlight.id)
+          }}
+          title="Click to remove highlight"
+        >
+          {highlight.text}
+          <button
+            onClick={(e) => {
+              e.stopPropagation()
+              handleRemoveHighlight(highlight.id)
+            }}
+            className="absolute -top-2 -right-2 opacity-0 group-hover:opacity-100 transition-opacity bg-red-500 text-white rounded-full p-0.5 z-10"
+            title="Remove highlight"
+          >
+            <X className="w-3 h-3" />
+          </button>
+        </mark>
+      )
+
+      lastIndex = highlight.endIndex
+    })
+
+    if (lastIndex < articleContent.length) {
+      elements.push(
+        <span key="text-end">
+          {articleContent.substring(lastIndex)}
+        </span>
+      )
+    }
+
+    return elements
+  }
+
   const difficulty = article.learning_enhancements.estimated_difficulty
   const readingTime = article.learning_enhancements.estimated_reading_time
 
@@ -310,86 +530,213 @@ export default function ArticleReader({ article }: ArticleReaderProps) {
           </div>
         </div>
 
-        {/* Main Content */}
-        <div className="bg-white border-2 border-gray-200 rounded-lg p-8 mb-8">
-          <div className="article-content-wrapper">
-            <article
-              dangerouslySetInnerHTML={{ __html: formattedContent }}
-              className="prose prose-lg max-w-none
-                prose-p:text-gray-900
-                prose-p:leading-relaxed
-                [&_p]:mb-6
-                [&_p:last-child]:mb-0
-                whitespace-pre-wrap"
-              style={{ whiteSpace: 'pre-wrap' }}
-            />
-          </div>
+        {/* Color Selector and Explain Button */}
+        <div className="bg-white border-2 border-gray-200 rounded-lg p-6 mb-8">
+          <div className="flex items-center justify-between gap-4 flex-wrap">
+            <div className="flex-1 min-w-[300px]">
+              <label className="block mb-3 text-gray-700 font-medium">
+                Select Highlight Color: {!selectedColor && <span className="text-gray-500 text-sm font-normal">(No color selected)</span>}
+              </label>
+              <div className="flex flex-wrap gap-3">
+                {highlightColors.map((color) => (
+                  <button
+                    key={color.value}
+                    onClick={() => handleColorClick(color.value)}
+                    className="relative group"
+                    title={color.name}
+                  >
+                    <div
+                      className={`w-12 h-12 rounded-lg border-2 transition-all ${
+                        selectedColor === color.value
+                          ? 'border-indigo-600 scale-110 shadow-lg'
+                          : 'border-gray-300 hover:border-gray-400 hover:scale-105'
+                      }`}
+                      style={{ backgroundColor: color.value }}
+                    >
+                      {selectedColor === color.value && (
+                        <div className="absolute inset-0 flex items-center justify-center">
+                          <Check className="w-6 h-6 text-gray-700" />
+                        </div>
+                      )}
+                    </div>
+                    <span className="absolute -bottom-6 left-1/2 -translate-x-1/2 text-xs text-gray-600 opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap">
+                      {color.name}
+                    </span>
+                  </button>
+                ))}
+              </div>
+            </div>
 
-          {/* Source Link */}
-          <div className="mt-8 pt-6 border-t border-gray-200">
-            <a
-              href={article.url}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="text-blue-600 hover:text-blue-700 font-medium inline-flex items-center gap-2"
-            >
-              View Original Article →
-            </a>
+            <div className="flex items-center">
+              <button
+                onClick={handleExplainClick}
+                disabled={isLoadingExplanations}
+                className={`min-w-[220px] px-6 py-3 rounded-lg font-medium transition-all ${
+                  showExplanations
+                    ? 'bg-indigo-100 text-indigo-700 hover:bg-indigo-200'
+                    : 'bg-indigo-600 hover:bg-indigo-700 text-white'
+                } disabled:opacity-50 disabled:cursor-not-allowed`}
+              >
+                {isLoadingExplanations ? (
+                  <>
+                    <div className="inline-block h-4 w-4 border-2 border-current border-t-transparent rounded-full animate-spin mr-2" />
+                    Loading...
+                  </>
+                ) : (() => {
+                  const withoutExplanations = highlights.filter(h => !h.explanation).length
+                  const withExplanations = highlights.filter(h => h.explanation).length
+
+                  if (highlights.length === 0) {
+                    return 'Show Explanations (0)'
+                  } else if (withoutExplanations === 0 && withExplanations > 0) {
+                    return showExplanations ? 'Hide Explanations' : `Show Explanations (${withExplanations})`
+                  } else if (withExplanations === 0) {
+                    return `Explain ${withoutExplanations} highlight${withoutExplanations > 1 ? 's' : ''}`
+                  } else {
+                    return `Add ${withoutExplanations} more explanation${withoutExplanations > 1 ? 's' : ''}`
+                  }
+                })()}
+              </button>
+            </div>
           </div>
         </div>
 
-        {/* Vocabulary Section */}
-        {vocabularyAnnotations.length > 0 && (
-          <section className="bg-white border-2 border-gray-200 rounded-lg p-6 mb-8">
-            <h2 className="text-2xl font-bold mb-6 text-gray-900 flex items-center gap-2">
-              <span>📖</span>
-              Schlüsselwörter
-              <span className="text-sm font-normal text-gray-600">(Key Vocabulary)</span>
-            </h2>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              {vocabularyAnnotations.map((vocab, index) => (
-              <div
-                key={index}
-                className="border border-gray-200 rounded-lg p-4 hover:border-purple-300 hover:shadow-sm transition-all"
+        {/* Main Content Grid */}
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 items-start">
+          {/* Article Text */}
+          <div className="bg-white border-2 border-gray-200 rounded-lg overflow-hidden h-[700px] flex flex-col">
+            <div className="p-6 border-b border-gray-200 bg-gray-50">
+              <h2 className="text-xl font-bold text-indigo-900">Learning Article</h2>
+            </div>
+            <div className="flex-1 overflow-y-auto p-6">
+              <article
+                ref={contentRef}
+                onMouseUp={handleMouseUp}
+                className="prose prose-sm max-w-none text-gray-700 leading-relaxed whitespace-pre-wrap select-text"
+                style={{ userSelect: 'text' }}
               >
-                <div className="flex items-baseline gap-2 mb-2">
-                  <h3 className="text-lg font-bold text-gray-900">
-                    {vocab.article && (
-                      <span className="text-purple-600 mr-1">{vocab.article}</span>
+                {renderHighlightedText()}
+              </article>
+            </div>
+            <div className="p-4 border-t border-gray-200 bg-gray-50">
+              <p className="text-sm text-gray-500">
+                💡 Tip: {selectedColor ? 'Select any word or phrase to highlight it with the chosen color' : 'Choose a color above to start highlighting text'}
+              </p>
+              <div className="mt-2">
+                <a
+                  href={article.url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-blue-600 hover:text-blue-700 font-medium text-sm inline-flex items-center gap-1"
+                >
+                  View Original Article →
+                </a>
+              </div>
+            </div>
+          </div>
+
+          {/* Explanation Panel */}
+          <div className="bg-white border-2 border-gray-200 rounded-lg overflow-hidden h-[700px] flex flex-col">
+            {showExplanations ? (
+              <>
+                <div className="p-6 border-b border-gray-200 bg-gray-50">
+                  <h2 className="text-xl font-bold text-indigo-900">Explanations</h2>
+                  <p className="text-sm text-gray-600 mt-1">
+                    {highlights.filter(h => h.explanation).length} {highlights.filter(h => h.explanation).length === 1 ? 'explanation' : 'explanations'}
+                    {highlights.filter(h => !h.explanation).length > 0 && (
+                      <span className="text-amber-600 ml-1">
+                        ({highlights.filter(h => !h.explanation).length} pending)
+                      </span>
                     )}
-                    {vocab.word}
-                  </h3>
-                  <span className="text-xs font-semibold px-2 py-1 bg-purple-100 text-purple-800 rounded">
-                    {vocab.cefr_level}
-                  </span>
+                  </p>
                 </div>
-                {vocab.plural && (
-                  <p className="text-xs text-gray-600 mb-2">Plural: {vocab.plural}</p>
-                )}
-                <div className="space-y-2 text-sm">
-                  <p className="text-gray-900 font-medium flex items-start gap-2">
-                    <span>🇬🇧</span>
-                    {vocab.english_translation}
-                  </p>
-                  <p className="text-gray-700 flex items-start gap-2">
-                    <span>🇩🇪</span>
-                    {vocab.german_explanation}
-                  </p>
+                <div className="flex-1 overflow-y-auto p-6">
+                  {highlights.filter(h => h.explanation).length === 0 ? (
+                    <div className="text-center text-gray-400 py-12">
+                      <BookOpen className="w-12 h-12 mx-auto mb-3 opacity-50" />
+                      <p>No explanations yet.</p>
+                      <p className="text-sm mt-2">Click the button to generate explanations!</p>
+                    </div>
+                  ) : (
+                    <div className="space-y-4">
+                      {highlights.filter(h => h.explanation).map((highlight, index) => (
+                        <div
+                          key={highlight.id}
+                          className="border-2 border-gray-200 rounded-lg overflow-hidden transition-all hover:shadow-lg"
+                          style={{ borderLeftWidth: '4px', borderLeftColor: highlight.color }}
+                        >
+                          <div className="p-4 bg-gray-50 border-b border-gray-200">
+                            <div className="flex items-start justify-between gap-2">
+                              <div className="flex-1 flex items-center gap-2">
+                                <span className="inline-flex items-center justify-center w-6 h-6 rounded-full text-white text-xs bg-indigo-600 font-bold">
+                                  {index + 1}
+                                </span>
+                                <span
+                                  className="px-2 py-1 rounded font-medium"
+                                  style={{ backgroundColor: highlight.color }}
+                                >
+                                  {highlight.explanation?.word || highlight.text}
+                                </span>
+                              </div>
+                              <button
+                                onClick={() => handleNavigateToHighlight(highlight.id)}
+                                className="text-indigo-600 hover:text-indigo-700 text-sm font-medium"
+                                title="Jump to text"
+                              >
+                                Jump ↗
+                              </button>
+                            </div>
+                          </div>
+
+                          <div className="p-4 space-y-3">
+                            {/* Meaning */}
+                            <div className="bg-blue-50 rounded-lg p-3">
+                              <div className="text-xs font-semibold text-blue-900 mb-1">
+                                💬 Meaning
+                              </div>
+                              <div className="text-sm text-gray-700">
+                                {highlight.explanation?.meaning ? formatText(highlight.explanation.meaning) : 'Loading...'}
+                              </div>
+                            </div>
+
+                            {/* Grammar */}
+                            <div className="bg-purple-50 rounded-lg p-3">
+                              <div className="text-xs font-semibold text-purple-900 mb-1">
+                                ✨ Grammar
+                              </div>
+                              <div className="text-sm text-gray-700">
+                                {highlight.explanation?.grammar ? formatText(highlight.explanation.grammar) : 'Loading...'}
+                              </div>
+                            </div>
+
+                            {/* Example */}
+                            <div className="bg-green-50 rounded-lg p-3">
+                              <div className="text-xs font-semibold text-green-900 mb-1">
+                                📖 Example Sentence
+                              </div>
+                              <div className="text-sm text-gray-700 italic">
+                                {highlight.explanation?.example ? formatText(highlight.explanation.example) : 'Loading...'}
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </>
+            ) : (
+              <div className="h-full flex items-center justify-center">
+                <div className="text-center text-gray-400 p-8">
+                  <BookOpen className="w-16 h-16 mx-auto mb-4 opacity-50" />
+                  <p className="text-lg">Click "Show Explanations" to view details</p>
+                  <p className="text-sm mt-2">Highlight some text first to get started</p>
                 </div>
               </div>
-            ))}
+            )}
           </div>
-        </section>
-        )}
+        </div>
 
-        {/* Grammar Patterns */}
-        <GrammarSidebar grammarPatterns={grammarPatterns} />
-
-        {/* Cultural Notes */}
-        <CulturalNotes culturalNotes={culturalNotes} />
-
-        {/* Comprehension Questions */}
-        <ComprehensionQuestions questions={comprehensionQuestions} />
       </div>
     </div>
   )
