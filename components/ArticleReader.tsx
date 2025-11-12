@@ -239,7 +239,7 @@ export default function ArticleReader({ article }: ArticleReaderProps) {
 
     const newHighlight: Highlight = {
       id: `highlight-${Date.now()}`,
-      text: selectedText.trim(),
+      text: selectedText, // Don't trim - keep exact text with spaces
       color: selectedColor,
       startIndex,
       endIndex,
@@ -388,11 +388,14 @@ export default function ArticleReader({ article }: ArticleReaderProps) {
         <mark
           key={highlight.id}
           id={highlight.id}
-          className="relative group rounded-sm transition-all cursor-pointer hover:opacity-80"
+          className="relative group transition-all cursor-pointer hover:opacity-80"
           style={{
             backgroundColor: highlight.color,
-            padding: 0,
-            margin: 0
+            padding: '2px 0',
+            margin: 0,
+            borderRadius: 0,
+            lineHeight: 'inherit',
+            display: 'inline'
           }}
           onClick={(e) => {
             e.stopPropagation()
