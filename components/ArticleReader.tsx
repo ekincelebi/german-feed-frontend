@@ -62,6 +62,14 @@ export default function ArticleReader({ article }: ArticleReaderProps) {
 
   const articleContent = article.processed_content.cleaned_content
 
+  // Persist highlights whenever they change
+  useEffect(() => {
+    if (highlights.length > 0) {
+      const highlightsKey = `highlights_${article.id}`
+      localStorage.setItem(highlightsKey, JSON.stringify(highlights))
+    }
+  }, [highlights, article.id])
+
   // Load states from localStorage
   useEffect(() => {
     const readArticles = JSON.parse(localStorage.getItem('readArticles') || '[]')
@@ -74,6 +82,19 @@ export default function ArticleReader({ article }: ArticleReaderProps) {
     const savedWordsKey = `savedWords_${article.id}`
     const storedSavedWords = JSON.parse(localStorage.getItem(savedWordsKey) || '[]')
     setSavedWords(new Set(storedSavedWords))
+
+    // Load persisted highlights for this article
+    const highlightsKey = `highlights_${article.id}`
+    const storedHighlights = localStorage.getItem(highlightsKey)
+    if (storedHighlights) {
+      const parsedHighlights = JSON.parse(storedHighlights)
+      setHighlights(parsedHighlights)
+
+      // If there are saved words, automatically show explanations
+      if (storedSavedWords.length > 0) {
+        setShowExplanations(true)
+      }
+    }
   }, [article.id])
 
   const toggleRead = () => {
@@ -259,7 +280,25 @@ export default function ArticleReader({ article }: ArticleReaderProps) {
   }
 
   const handleRemoveHighlight = (id: string) => {
-    setHighlights(highlights.filter(h => h.id !== id))
+    const updatedHighlights = highlights.filter(h => h.id !== id)
+    setHighlights(updatedHighlights)
+
+    // Also remove from saved words if it was saved
+    if (savedWords.has(id)) {
+      setSavedWords(prev => {
+        const newSet = new Set(prev)
+        newSet.delete(id)
+        const savedWordsKey = `savedWords_${article.id}`
+        localStorage.setItem(savedWordsKey, JSON.stringify(Array.from(newSet)))
+        return newSet
+      })
+    }
+
+    // Clean up localStorage if no highlights left
+    if (updatedHighlights.length === 0) {
+      const highlightsKey = `highlights_${article.id}`
+      localStorage.removeItem(highlightsKey)
+    }
   }
 
   const handleNavigateToHighlight = (highlightId: string) => {
