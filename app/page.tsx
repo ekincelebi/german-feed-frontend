@@ -4,6 +4,8 @@ import { supabase } from '@/lib/supabase'
 import ArticleCard from '@/components/ArticleCard'
 import type { LearningArticle } from '@/lib/types'
 import { useState, useEffect } from 'react'
+import Link from 'next/link'
+import { Bookmark } from 'lucide-react'
 
 export default function HomePage() {
   const [selectedTheme, setSelectedTheme] = useState<string>('')
@@ -226,6 +228,15 @@ export default function HomePage() {
               </svg>
               <span>{showSavedOnly ? 'Saved' : 'Saved'}</span>
             </button>
+
+            {/* Saved Words Link */}
+            <Link
+              href="/saved-words"
+              className="px-6 py-2 rounded-full font-medium transition-all inline-flex items-center gap-2 bg-green-600 text-white hover:bg-green-700 shadow-md"
+            >
+              <Bookmark className="w-5 h-5" fill="currentColor" />
+              <span>Saved Words</span>
+            </Link>
           </div>
         </div>
 
