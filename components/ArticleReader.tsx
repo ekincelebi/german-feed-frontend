@@ -57,6 +57,9 @@ export default function ArticleReader({ article }: ArticleReaderProps) {
   const [showPendingWarning, setShowPendingWarning] = useState(false)
   const contentRef = useRef<HTMLDivElement>(null)
 
+  // Saved words state (temporary until data model is implemented)
+  const [savedWords, setSavedWords] = useState<Set<string>>(new Set())
+
   const articleContent = article.processed_content.cleaned_content
 
   // Load states from localStorage
@@ -263,6 +266,18 @@ export default function ArticleReader({ article }: ArticleReaderProps) {
         element.classList.remove('animate-pulse')
       }, 1000)
     }
+  }
+
+  const toggleSaveWord = (highlightId: string) => {
+    setSavedWords(prev => {
+      const newSet = new Set(prev)
+      if (newSet.has(highlightId)) {
+        newSet.delete(highlightId)
+      } else {
+        newSet.add(highlightId)
+      }
+      return newSet
+    })
   }
 
   const handleExplainClick = async () => {
@@ -700,13 +715,29 @@ export default function ArticleReader({ article }: ArticleReaderProps) {
                                   {highlight.explanation?.word || highlight.text}
                                 </span>
                               </div>
-                              <button
-                                onClick={() => handleNavigateToHighlight(highlight.id)}
-                                className="text-indigo-600 hover:text-indigo-700 text-sm font-medium"
-                                title="Jump to text"
-                              >
-                                Jump ↗
-                              </button>
+                              <div className="flex items-center gap-2">
+                                <button
+                                  onClick={() => toggleSaveWord(highlight.id)}
+                                  className={`transition-colors ${
+                                    savedWords.has(highlight.id)
+                                      ? 'text-green-600 hover:text-green-700'
+                                      : 'text-gray-400 hover:text-gray-600'
+                                  }`}
+                                  title={savedWords.has(highlight.id) ? 'Unsave word' : 'Save word'}
+                                >
+                                  <Bookmark
+                                    className="h-5 w-5"
+                                    fill={savedWords.has(highlight.id) ? 'currentColor' : 'none'}
+                                  />
+                                </button>
+                                <button
+                                  onClick={() => handleNavigateToHighlight(highlight.id)}
+                                  className="text-indigo-600 hover:text-indigo-700 text-sm font-medium"
+                                  title="Jump to text"
+                                >
+                                  Jump ↗
+                                </button>
+                              </div>
                             </div>
                           </div>
 
