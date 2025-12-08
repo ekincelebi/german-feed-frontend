@@ -69,6 +69,11 @@ export default function ArticleReader({ article }: ArticleReaderProps) {
 
     setIsRead(readArticles.includes(article.id))
     setIsSaved(savedArticles.includes(article.id))
+
+    // Load saved words for this article
+    const savedWordsKey = `savedWords_${article.id}`
+    const storedSavedWords = JSON.parse(localStorage.getItem(savedWordsKey) || '[]')
+    setSavedWords(new Set(storedSavedWords))
   }, [article.id])
 
   const toggleRead = () => {
@@ -276,6 +281,11 @@ export default function ArticleReader({ article }: ArticleReaderProps) {
       } else {
         newSet.add(highlightId)
       }
+
+      // Persist to localStorage
+      const savedWordsKey = `savedWords_${article.id}`
+      localStorage.setItem(savedWordsKey, JSON.stringify(Array.from(newSet)))
+
       return newSet
     })
   }
@@ -696,84 +706,186 @@ export default function ArticleReader({ article }: ArticleReaderProps) {
                     </div>
                   ) : (
                     <div className="space-y-4">
-                      {highlights.filter(h => h.explanation).map((highlight, index) => (
-                        <div
-                          key={highlight.id}
-                          className="border-2 border-gray-200 rounded-lg overflow-hidden transition-all hover:shadow-lg"
-                          style={{ borderLeftWidth: '4px', borderLeftColor: highlight.color }}
-                        >
-                          <div className="p-4 bg-gray-50 border-b border-gray-200">
-                            <div className="flex items-start justify-between gap-2">
-                              <div className="flex-1 flex items-center gap-2">
-                                <span className="inline-flex items-center justify-center w-6 h-6 rounded-full text-white text-xs bg-indigo-600 font-bold">
-                                  {index + 1}
-                                </span>
-                                <span
-                                  className="px-2 py-1 rounded font-medium"
-                                  style={{ backgroundColor: highlight.color }}
+                      {/* Saved Words Section */}
+                      {highlights.filter(h => h.explanation && savedWords.has(h.id)).length > 0 && (
+                        <>
+                          <div className="bg-green-50 border-2 border-green-200 rounded-lg p-3 mb-2">
+                            <div className="flex items-center gap-2">
+                              <Bookmark className="h-4 w-4 text-green-600" fill="currentColor" />
+                              <span className="text-sm font-bold text-green-900">Saved Words</span>
+                            </div>
+                          </div>
+                          {highlights
+                            .filter(h => h.explanation && savedWords.has(h.id))
+                            .map((highlight) => {
+                              const allWithExplanations = highlights.filter(h => h.explanation)
+                              const index = allWithExplanations.findIndex(h => h.id === highlight.id)
+                              return (
+                                <div
+                                  key={highlight.id}
+                                  className="border-2 border-green-300 rounded-lg overflow-hidden transition-all hover:shadow-lg bg-green-50"
+                                  style={{ borderLeftWidth: '4px', borderLeftColor: highlight.color }}
                                 >
-                                  {highlight.explanation?.word || highlight.text}
-                                </span>
+                                  <div className="p-4 bg-green-100 border-b border-green-200">
+                                    <div className="flex items-start justify-between gap-2">
+                                      <div className="flex-1 flex items-center gap-2">
+                                        <span className="inline-flex items-center justify-center w-6 h-6 rounded-full text-white text-xs bg-indigo-600 font-bold">
+                                          {index + 1}
+                                        </span>
+                                        <span
+                                          className="px-2 py-1 rounded font-medium"
+                                          style={{ backgroundColor: highlight.color }}
+                                        >
+                                          {highlight.explanation?.word || highlight.text}
+                                        </span>
+                                      </div>
+                                      <div className="flex items-center gap-2">
+                                        <button
+                                          onClick={() => toggleSaveWord(highlight.id)}
+                                          className="text-green-600 hover:text-green-700 transition-colors"
+                                          title="Unsave word"
+                                        >
+                                          <Bookmark
+                                            className="h-5 w-5"
+                                            fill="currentColor"
+                                          />
+                                        </button>
+                                        <button
+                                          onClick={() => handleNavigateToHighlight(highlight.id)}
+                                          className="text-indigo-600 hover:text-indigo-700 text-sm font-medium"
+                                          title="Jump to text"
+                                        >
+                                          Jump ↗
+                                        </button>
+                                      </div>
+                                    </div>
+                                  </div>
+
+                                  <div className="p-4 space-y-3 bg-white">
+                                    {/* Meaning */}
+                                    <div className="bg-blue-50 rounded-lg p-3">
+                                      <div className="text-xs font-semibold text-blue-900 mb-1">
+                                        💬 Meaning
+                                      </div>
+                                      <div className="text-sm text-gray-700">
+                                        {highlight.explanation?.meaning ? formatText(highlight.explanation.meaning) : 'Loading...'}
+                                      </div>
+                                    </div>
+
+                                    {/* Grammar */}
+                                    <div className="bg-purple-50 rounded-lg p-3">
+                                      <div className="text-xs font-semibold text-purple-900 mb-1">
+                                        ✨ Grammar
+                                      </div>
+                                      <div className="text-sm text-gray-700">
+                                        {highlight.explanation?.grammar ? formatText(highlight.explanation.grammar) : 'Loading...'}
+                                      </div>
+                                    </div>
+
+                                    {/* Example */}
+                                    <div className="bg-green-50 rounded-lg p-3">
+                                      <div className="text-xs font-semibold text-green-900 mb-1">
+                                        📖 Example Sentence
+                                      </div>
+                                      <div className="text-sm text-gray-700 italic">
+                                        {highlight.explanation?.example ? formatText(highlight.explanation.example) : 'Loading...'}
+                                      </div>
+                                    </div>
+                                  </div>
+                                </div>
+                              )
+                            })}
+                          {/* Separator between saved and unsaved */}
+                          {highlights.filter(h => h.explanation && !savedWords.has(h.id)).length > 0 && (
+                            <div className="border-t-2 border-gray-300 my-6 pt-2">
+                              <span className="text-sm font-semibold text-gray-600">Other Words</span>
+                            </div>
+                          )}
+                        </>
+                      )}
+                      {/* Unsaved Words Section */}
+                      {highlights.filter(h => h.explanation && !savedWords.has(h.id)).map((highlight) => {
+                        const allWithExplanations = highlights.filter(h => h.explanation)
+                        const index = allWithExplanations.findIndex(h => h.id === highlight.id)
+                        return (
+                          <div
+                            key={highlight.id}
+                            className="border-2 border-gray-200 rounded-lg overflow-hidden transition-all hover:shadow-lg"
+                            style={{ borderLeftWidth: '4px', borderLeftColor: highlight.color }}
+                          >
+                            <div className="p-4 bg-gray-50 border-b border-gray-200">
+                              <div className="flex items-start justify-between gap-2">
+                                <div className="flex-1 flex items-center gap-2">
+                                  <span className="inline-flex items-center justify-center w-6 h-6 rounded-full text-white text-xs bg-indigo-600 font-bold">
+                                    {index + 1}
+                                  </span>
+                                  <span
+                                    className="px-2 py-1 rounded font-medium"
+                                    style={{ backgroundColor: highlight.color }}
+                                  >
+                                    {highlight.explanation?.word || highlight.text}
+                                  </span>
+                                </div>
+                                <div className="flex items-center gap-2">
+                                  <button
+                                    onClick={() => toggleSaveWord(highlight.id)}
+                                    className={`transition-colors ${
+                                      savedWords.has(highlight.id)
+                                        ? 'text-green-600 hover:text-green-700'
+                                        : 'text-gray-400 hover:text-gray-600'
+                                    }`}
+                                    title={savedWords.has(highlight.id) ? 'Unsave word' : 'Save word'}
+                                  >
+                                    <Bookmark
+                                      className="h-5 w-5"
+                                      fill={savedWords.has(highlight.id) ? 'currentColor' : 'none'}
+                                    />
+                                  </button>
+                                  <button
+                                    onClick={() => handleNavigateToHighlight(highlight.id)}
+                                    className="text-indigo-600 hover:text-indigo-700 text-sm font-medium"
+                                    title="Jump to text"
+                                  >
+                                    Jump ↗
+                                  </button>
+                                </div>
                               </div>
-                              <div className="flex items-center gap-2">
-                                <button
-                                  onClick={() => toggleSaveWord(highlight.id)}
-                                  className={`transition-colors ${
-                                    savedWords.has(highlight.id)
-                                      ? 'text-green-600 hover:text-green-700'
-                                      : 'text-gray-400 hover:text-gray-600'
-                                  }`}
-                                  title={savedWords.has(highlight.id) ? 'Unsave word' : 'Save word'}
-                                >
-                                  <Bookmark
-                                    className="h-5 w-5"
-                                    fill={savedWords.has(highlight.id) ? 'currentColor' : 'none'}
-                                  />
-                                </button>
-                                <button
-                                  onClick={() => handleNavigateToHighlight(highlight.id)}
-                                  className="text-indigo-600 hover:text-indigo-700 text-sm font-medium"
-                                  title="Jump to text"
-                                >
-                                  Jump ↗
-                                </button>
+                            </div>
+
+                            <div className="p-4 space-y-3">
+                              {/* Meaning */}
+                              <div className="bg-blue-50 rounded-lg p-3">
+                                <div className="text-xs font-semibold text-blue-900 mb-1">
+                                  💬 Meaning
+                                </div>
+                                <div className="text-sm text-gray-700">
+                                  {highlight.explanation?.meaning ? formatText(highlight.explanation.meaning) : 'Loading...'}
+                                </div>
+                              </div>
+
+                              {/* Grammar */}
+                              <div className="bg-purple-50 rounded-lg p-3">
+                                <div className="text-xs font-semibold text-purple-900 mb-1">
+                                  ✨ Grammar
+                                </div>
+                                <div className="text-sm text-gray-700">
+                                  {highlight.explanation?.grammar ? formatText(highlight.explanation.grammar) : 'Loading...'}
+                                </div>
+                              </div>
+
+                              {/* Example */}
+                              <div className="bg-green-50 rounded-lg p-3">
+                                <div className="text-xs font-semibold text-green-900 mb-1">
+                                  📖 Example Sentence
+                                </div>
+                                <div className="text-sm text-gray-700 italic">
+                                  {highlight.explanation?.example ? formatText(highlight.explanation.example) : 'Loading...'}
+                                </div>
                               </div>
                             </div>
                           </div>
-
-                          <div className="p-4 space-y-3">
-                            {/* Meaning */}
-                            <div className="bg-blue-50 rounded-lg p-3">
-                              <div className="text-xs font-semibold text-blue-900 mb-1">
-                                💬 Meaning
-                              </div>
-                              <div className="text-sm text-gray-700">
-                                {highlight.explanation?.meaning ? formatText(highlight.explanation.meaning) : 'Loading...'}
-                              </div>
-                            </div>
-
-                            {/* Grammar */}
-                            <div className="bg-purple-50 rounded-lg p-3">
-                              <div className="text-xs font-semibold text-purple-900 mb-1">
-                                ✨ Grammar
-                              </div>
-                              <div className="text-sm text-gray-700">
-                                {highlight.explanation?.grammar ? formatText(highlight.explanation.grammar) : 'Loading...'}
-                              </div>
-                            </div>
-
-                            {/* Example */}
-                            <div className="bg-green-50 rounded-lg p-3">
-                              <div className="text-xs font-semibold text-green-900 mb-1">
-                                📖 Example Sentence
-                              </div>
-                              <div className="text-sm text-gray-700 italic">
-                                {highlight.explanation?.example ? formatText(highlight.explanation.example) : 'Loading...'}
-                              </div>
-                            </div>
-                          </div>
-                        </div>
-                      ))}
+                        )
+                      })}
                     </div>
                   )}
                 </div>
