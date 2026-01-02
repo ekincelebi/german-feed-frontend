@@ -75,3 +75,25 @@ export interface LearningArticle {
   processed_content: ProcessedContent
   learning_enhancements: LearningEnhancements
 }
+
+// Saved Words Types
+export interface SavedWord {
+  id: string
+  word: string
+  meaning: string
+  grammar: string
+  example: string
+  articleId: string
+  color: string
+  savedAt: number
+  groupId: string | null
+  onlyShowInGroup: boolean
+  order: number
+}
+
+export interface WordGroup {
+  id: string
+  name: string
+  createdAt: number
+  order: number
+}

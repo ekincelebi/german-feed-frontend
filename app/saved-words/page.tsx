@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react'
 import Link from 'next/link'
-import { ArrowLeft, Bookmark, X, GripVertical } from 'lucide-react'
+import { ArrowLeft, Bookmark, X, GripVertical, Folder, FolderOpen, Plus, ChevronDown, ChevronUp, Trash2, Edit2, FolderX } from 'lucide-react'
 
 interface SavedWord {
   id: string
@@ -13,17 +13,64 @@ interface SavedWord {
   articleId: string
   color: string
   savedAt: number
+  groupId: string | null
+  onlyShowInGroup: boolean
+  order: number
+}
+
+interface WordGroup {
+  id: string
+  name: string
+  createdAt: number
+  order: number
 }
 
 export default function SavedWordsPage() {
   const [savedWords, setSavedWords] = useState<SavedWord[]>([])
+  const [wordGroups, setWordGroups] = useState<WordGroup[]>([])
   const [selectedWord, setSelectedWord] = useState<SavedWord | null>(null)
+  const [selectedGroup, setSelectedGroup] = useState<WordGroup | null>(null)
   const [isDragMode, setIsDragMode] = useState(false)
   const [draggedIndex, setDraggedIndex] = useState<number | null>(null)
+  const [draggedWordId, setDraggedWordId] = useState<string | null>(null)
+  const [expandGroupedWords, setExpandGroupedWords] = useState(false)
+  const [showCreateGroupModal, setShowCreateGroupModal] = useState(false)
+  const [showEditGroupModal, setShowEditGroupModal] = useState(false)
+  const [newGroupName, setNewGroupName] = useState('')
+  const [editingGroup, setEditingGroup] = useState<WordGroup | null>(null)
+  const [dragOverGroupId, setDragOverGroupId] = useState<string | null>(null)
 
   useEffect(() => {
     loadSavedWords()
+    loadWordGroups()
+    loadPreferences()
   }, [])
+
+  const loadPreferences = () => {
+    const prefs = localStorage.getItem('savedWordsPreferences')
+    if (prefs) {
+      const parsed = JSON.parse(prefs)
+      setExpandGroupedWords(parsed.expandGroupedWords || false)
+    }
+  }
+
+  const savePreferences = (expandGrouped: boolean) => {
+    localStorage.setItem('savedWordsPreferences', JSON.stringify({
+      expandGroupedWords: expandGrouped
+    }))
+  }
+
+  const loadWordGroups = () => {
+    const groups = localStorage.getItem('wordGroups')
+    if (groups) {
+      setWordGroups(JSON.parse(groups))
+    }
+  }
+
+  const saveWordGroups = (groups: WordGroup[]) => {
+    localStorage.setItem('wordGroups', JSON.stringify(groups))
+    setWordGroups(groups)
+  }
 
   const loadSavedWords = () => {
     const allSavedWords: SavedWord[] = []
@@ -56,7 +103,10 @@ export default function SavedWordsPage() {
             example: h.explanation.example,
             articleId: articleId,
             color: h.color,
-            savedAt: Date.now() - (savedHighlights.length - index) // Approximate order
+            savedAt: Date.now() - (savedHighlights.length - index),
+            groupId: h.groupId || null,
+            onlyShowInGroup: h.onlyShowInGroup || false,
+            order: h.order || 0
           })
         })
       }
@@ -89,8 +139,11 @@ export default function SavedWordsPage() {
     localStorage.setItem('savedWordsOrder', JSON.stringify(orderArray))
   }
 
-  const handleDragStart = (index: number) => {
+  const handleDragStart = (index: number, wordId?: string) => {
     setDraggedIndex(index)
+    if (wordId) {
+      setDraggedWordId(wordId)
+    }
   }
 
   const handleDragOver = (e: React.DragEvent, index: number) => {
@@ -108,7 +161,163 @@ export default function SavedWordsPage() {
 
   const handleDragEnd = () => {
     setDraggedIndex(null)
+    setDraggedWordId(null)
+    setDragOverGroupId(null)
     saveWordsOrder(savedWords)
+  }
+
+  const handleDropOnGroup = (groupId: string) => {
+    if (!draggedWordId) return
+
+    const wordIndex = savedWords.findIndex(w => w.id === draggedWordId)
+    if (wordIndex === -1) return
+
+    const updatedWords = [...savedWords]
+    updatedWords[wordIndex] = {
+      ...updatedWords[wordIndex],
+      groupId: groupId,
+      onlyShowInGroup: true
+    }
+
+    setSavedWords(updatedWords)
+    updateWordInLocalStorage(updatedWords[wordIndex])
+    setDraggedWordId(null)
+    setDragOverGroupId(null)
+    setDraggedIndex(null)
+  }
+
+  const updateWordInLocalStorage = (word: SavedWord) => {
+    const highlightsKey = `highlights_${word.articleId}`
+    const highlights = JSON.parse(localStorage.getItem(highlightsKey) || '[]')
+
+    const highlightIndex = highlights.findIndex((h: any) => h.id === word.id)
+    if (highlightIndex !== -1) {
+      highlights[highlightIndex] = {
+        ...highlights[highlightIndex],
+        groupId: word.groupId,
+        onlyShowInGroup: word.onlyShowInGroup,
+        order: word.order
+      }
+      localStorage.setItem(highlightsKey, JSON.stringify(highlights))
+    }
+  }
+
+  const createGroup = () => {
+    if (!newGroupName.trim()) return
+
+    const newGroup: WordGroup = {
+      id: `group_${Date.now()}`,
+      name: newGroupName.trim(),
+      createdAt: Date.now(),
+      order: wordGroups.length
+    }
+
+    const updatedGroups = [...wordGroups, newGroup]
+    saveWordGroups(updatedGroups)
+    setNewGroupName('')
+    setShowCreateGroupModal(false)
+  }
+
+  const deleteGroup = (groupId: string) => {
+    // Remove group from all words
+    const updatedWords = savedWords.map(word => {
+      if (word.groupId === groupId) {
+        const updated = { ...word, groupId: null, onlyShowInGroup: false }
+        updateWordInLocalStorage(updated)
+        return updated
+      }
+      return word
+    })
+
+    setSavedWords(updatedWords)
+
+    // Remove group
+    const updatedGroups = wordGroups.filter(g => g.id !== groupId)
+    saveWordGroups(updatedGroups)
+  }
+
+  const renameGroup = () => {
+    if (!editingGroup || !newGroupName.trim()) return
+
+    const updatedGroups = wordGroups.map(g =>
+      g.id === editingGroup.id ? { ...g, name: newGroupName.trim() } : g
+    )
+
+    saveWordGroups(updatedGroups)
+    setNewGroupName('')
+    setEditingGroup(null)
+    setShowEditGroupModal(false)
+  }
+
+  const openEditGroupModal = (group: WordGroup) => {
+    setEditingGroup(group)
+    setNewGroupName(group.name)
+    setShowEditGroupModal(true)
+  }
+
+  const removeWordFromGroup = (wordId: string) => {
+    const updatedWords = savedWords.map(word => {
+      if (word.id === wordId) {
+        const updated = { ...word, groupId: null, onlyShowInGroup: false }
+        updateWordInLocalStorage(updated)
+        return updated
+      }
+      return word
+    })
+
+    setSavedWords(updatedWords)
+
+    // Close group view if we're viewing it
+    if (selectedGroup) {
+      const wordsInGroup = updatedWords.filter(w => w.groupId === selectedGroup.id)
+      if (wordsInGroup.length === 0) {
+        setSelectedGroup(null)
+      }
+    }
+  }
+
+  const unsaveWord = (wordId: string) => {
+    const word = savedWords.find(w => w.id === wordId)
+    if (!word) return
+
+    // Remove from savedWords list
+    const savedWordsKey = `savedWords_${word.articleId}`
+
+    const savedWordIds = JSON.parse(localStorage.getItem(savedWordsKey) || '[]')
+    const updatedSavedIds = savedWordIds.filter((id: string) => id !== wordId)
+    localStorage.setItem(savedWordsKey, JSON.stringify(updatedSavedIds))
+
+    // Update state
+    const updatedWords = savedWords.filter(w => w.id !== wordId)
+    setSavedWords(updatedWords)
+    saveWordsOrder(updatedWords)
+
+    // Close modals if this word is selected
+    if (selectedWord?.id === wordId) {
+      setSelectedWord(null)
+    }
+  }
+
+  const toggleExpandGroupedWords = () => {
+    const newValue = !expandGroupedWords
+    setExpandGroupedWords(newValue)
+    savePreferences(newValue)
+  }
+
+  const getWordsToDisplay = () => {
+    if (expandGroupedWords) {
+      return savedWords
+    } else {
+      return savedWords.filter(w => !w.onlyShowInGroup)
+    }
+  }
+
+  const getGroupsToDisplay = () => {
+    return wordGroups
+  }
+
+  const getWordsInGroup = (groupId: string) => {
+    return savedWords.filter(w => w.groupId === groupId)
   }
 
   const formatText = (text: string) => {
@@ -151,6 +360,9 @@ export default function SavedWordsPage() {
     return <>{parts}</>
   }
 
+  const wordsToDisplay = getWordsToDisplay()
+  const groupsToDisplay = getGroupsToDisplay()
+
   return (
     <div className="min-h-screen bg-gray-50">
       <div className="max-w-7xl mx-auto px-4 py-8">
@@ -165,7 +377,7 @@ export default function SavedWordsPage() {
 
         {/* Header */}
         <header className="bg-white border-2 border-gray-200 rounded-lg p-8 mb-8">
-          <div className="flex items-center justify-between gap-4 mb-4">
+          <div className="flex items-center justify-between gap-4 mb-4 flex-wrap">
             <div className="flex items-center gap-4">
               <div className="bg-green-100 p-3 rounded-full">
                 <Bookmark className="h-8 w-8 text-green-600" fill="currentColor" />
@@ -179,23 +391,46 @@ export default function SavedWordsPage() {
                 </p>
               </div>
             </div>
-            {savedWords.length > 0 && (
+            <div className="flex gap-2 flex-wrap">
+              {savedWords.length > 0 && (
+                <>
+                  <button
+                    onClick={() => setIsDragMode(!isDragMode)}
+                    className={`px-4 py-2 rounded-lg font-medium transition-all inline-flex items-center gap-2 ${
+                      isDragMode
+                        ? 'bg-indigo-600 text-white hover:bg-indigo-700'
+                        : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+                    }`}
+                  >
+                    <GripVertical className="h-5 w-5" />
+                    {isDragMode ? 'Done Reordering' : 'Reorder'}
+                  </button>
+                  <button
+                    onClick={toggleExpandGroupedWords}
+                    className={`px-4 py-2 rounded-lg font-medium transition-all inline-flex items-center gap-2 ${
+                      expandGroupedWords
+                        ? 'bg-purple-600 text-white hover:bg-purple-700'
+                        : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+                    }`}
+                  >
+                    {expandGroupedWords ? <ChevronUp className="h-5 w-5" /> : <ChevronDown className="h-5 w-5" />}
+                    {expandGroupedWords ? 'Hide Grouped Words' : 'Show All Words'}
+                  </button>
+                </>
+              )}
               <button
-                onClick={() => setIsDragMode(!isDragMode)}
-                className={`px-4 py-2 rounded-lg font-medium transition-all inline-flex items-center gap-2 ${
-                  isDragMode
-                    ? 'bg-indigo-600 text-white hover:bg-indigo-700'
-                    : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
-                }`}
+                onClick={() => setShowCreateGroupModal(true)}
+                className="px-4 py-2 rounded-lg font-medium transition-all inline-flex items-center gap-2 bg-green-600 text-white hover:bg-green-700"
               >
-                <GripVertical className="h-5 w-5" />
-                {isDragMode ? 'Done Reordering' : 'Reorder Words'}
+                <Plus className="h-5 w-5" />
+                Create Group
               </button>
-            )}
+            </div>
           </div>
           <div className="bg-green-50 border-2 border-green-200 rounded-lg p-4 mt-4">
             <p className="text-green-900 font-semibold">
               {savedWords.length} {savedWords.length === 1 ? 'word' : 'words'} saved
+              {wordGroups.length > 0 && ` • ${wordGroups.length} ${wordGroups.length === 1 ? 'group' : 'groups'}`}
             </p>
           </div>
         </header>
@@ -231,43 +466,308 @@ export default function SavedWordsPage() {
                 </p>
               </div>
             )}
-            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4">
-              {savedWords.map((word, index) => (
-                <div
-                  key={word.id}
-                  draggable={isDragMode}
-                  onDragStart={() => handleDragStart(index)}
-                  onDragOver={(e) => handleDragOver(e, index)}
-                  onDragEnd={handleDragEnd}
-                  onClick={() => !isDragMode && setSelectedWord(word)}
-                  className={`bg-white border-2 border-gray-200 rounded-lg p-6 transition-all group ${
-                    isDragMode
-                      ? 'cursor-move hover:border-indigo-400 hover:shadow-md'
-                      : 'cursor-pointer hover:shadow-lg hover:border-green-300'
-                  } ${draggedIndex === index ? 'opacity-50' : ''}`}
-                  style={{ borderLeftWidth: '4px', borderLeftColor: word.color }}
-                >
-                  <div className="text-center">
-                    {isDragMode && (
-                      <div className="flex justify-center mb-2">
-                        <GripVertical className="h-5 w-5 text-gray-400" />
+
+            {/* Groups Display */}
+            {groupsToDisplay.length > 0 && (
+              <div className="mb-6">
+                <h2 className="text-xl font-bold text-gray-900 mb-4">Groups</h2>
+                <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4">
+                  {groupsToDisplay.map((group) => {
+                    const wordsInGroup = getWordsInGroup(group.id)
+                    return (
+                      <div
+                        key={group.id}
+                        onDragOver={(e) => {
+                          e.preventDefault()
+                          setDragOverGroupId(group.id)
+                        }}
+                        onDragLeave={() => setDragOverGroupId(null)}
+                        onDrop={(e) => {
+                          e.preventDefault()
+                          handleDropOnGroup(group.id)
+                        }}
+                        onClick={() => !isDragMode && setSelectedGroup(group)}
+                        className={`bg-gradient-to-br from-amber-50 to-amber-100 border-2 rounded-lg p-6 transition-all cursor-pointer ${
+                          dragOverGroupId === group.id
+                            ? 'border-amber-500 shadow-lg scale-105'
+                            : 'border-amber-300 hover:shadow-lg hover:border-amber-400'
+                        }`}
+                      >
+                        <div className="text-center">
+                          <Folder className="h-8 w-8 text-amber-600 mx-auto mb-2" />
+                          <p className="text-lg font-bold text-gray-900 mb-1">{group.name}</p>
+                          <p className="text-sm text-gray-600">{wordsInGroup.length} {wordsInGroup.length === 1 ? 'word' : 'words'}</p>
+                        </div>
                       </div>
-                    )}
-                    <p className={`text-lg font-bold transition-colors ${
-                      isDragMode
-                        ? 'text-gray-900'
-                        : 'text-gray-900 group-hover:text-green-600'
-                    }`}>
-                      {word.word}
-                    </p>
-                  </div>
+                    )
+                  })}
                 </div>
-              ))}
-            </div>
+              </div>
+            )}
+
+            {/* Words Display */}
+            {wordsToDisplay.length > 0 && (
+              <div>
+                <h2 className="text-xl font-bold text-gray-900 mb-4">
+                  {expandGroupedWords ? 'All Words' : 'Ungrouped Words'}
+                </h2>
+                <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4">
+                  {wordsToDisplay.map((word, index) => (
+                    <div
+                      key={word.id}
+                      draggable={true}
+                      onDragStart={() => handleDragStart(index, word.id)}
+                      onDragOver={(e) => isDragMode && handleDragOver(e, index)}
+                      onDragEnd={handleDragEnd}
+                      className={`bg-white border-2 border-gray-200 rounded-lg p-6 transition-all group relative ${
+                        isDragMode
+                          ? 'cursor-move hover:border-indigo-400 hover:shadow-md'
+                          : 'cursor-grab active:cursor-grabbing hover:shadow-lg hover:border-green-300'
+                      } ${draggedIndex === index ? 'opacity-50' : ''}`}
+                      style={{ borderLeftWidth: '4px', borderLeftColor: word.color }}
+                    >
+                      {/* Unsave button */}
+                      {!isDragMode && (
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation()
+                            unsaveWord(word.id)
+                          }}
+                          className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity p-1 rounded-full hover:bg-red-100"
+                        >
+                          <Trash2 className="h-4 w-4 text-red-600" />
+                        </button>
+                      )}
+
+                      <div
+                        className="text-center"
+                        onClick={() => !isDragMode && setSelectedWord(word)}
+                      >
+                        {isDragMode && (
+                          <div className="flex justify-center mb-2">
+                            <GripVertical className="h-5 w-5 text-gray-400" />
+                          </div>
+                        )}
+                        <p className={`text-lg font-bold transition-colors ${
+                          isDragMode
+                            ? 'text-gray-900'
+                            : 'text-gray-900 group-hover:text-green-600'
+                        }`}>
+                          {word.word}
+                        </p>
+                        {expandGroupedWords && word.groupId && (
+                          <p className="text-xs text-amber-600 mt-1 flex items-center justify-center gap-1">
+                            <Folder className="h-3 w-3" />
+                            {wordGroups.find(g => g.id === word.groupId)?.name}
+                          </p>
+                        )}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {wordsToDisplay.length === 0 && groupsToDisplay.length === 0 && (
+              <div className="text-center py-12 bg-white border-2 border-gray-200 rounded-lg">
+                <p className="text-gray-600">All words are in groups. Toggle "Expand Grouped" to see them.</p>
+              </div>
+            )}
           </>
         )}
 
-        {/* Popup Modal */}
+        {/* Create Group Modal */}
+        {showCreateGroupModal && (
+          <div
+            className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4"
+            onClick={() => {
+              setShowCreateGroupModal(false)
+              setNewGroupName('')
+            }}
+          >
+            <div
+              className="bg-white rounded-lg max-w-md w-full p-6"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <h2 className="text-2xl font-bold text-gray-900 mb-4">Create New Group</h2>
+              <input
+                type="text"
+                value={newGroupName}
+                onChange={(e) => setNewGroupName(e.target.value)}
+                onKeyDown={(e) => e.key === 'Enter' && createGroup()}
+                placeholder="Enter group name..."
+                className="w-full px-4 py-2 border-2 border-gray-300 rounded-lg focus:border-green-500 focus:outline-none mb-4"
+                autoFocus
+              />
+              <div className="flex gap-2 justify-end">
+                <button
+                  onClick={() => {
+                    setShowCreateGroupModal(false)
+                    setNewGroupName('')
+                  }}
+                  className="px-4 py-2 rounded-lg font-medium bg-gray-200 text-gray-700 hover:bg-gray-300"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={createGroup}
+                  disabled={!newGroupName.trim()}
+                  className="px-4 py-2 rounded-lg font-medium bg-green-600 text-white hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  Create
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Edit Group Modal */}
+        {showEditGroupModal && editingGroup && (
+          <div
+            className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4"
+            onClick={() => {
+              setShowEditGroupModal(false)
+              setEditingGroup(null)
+              setNewGroupName('')
+            }}
+          >
+            <div
+              className="bg-white rounded-lg max-w-md w-full p-6"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <h2 className="text-2xl font-bold text-gray-900 mb-4">Rename Group</h2>
+              <input
+                type="text"
+                value={newGroupName}
+                onChange={(e) => setNewGroupName(e.target.value)}
+                onKeyDown={(e) => e.key === 'Enter' && renameGroup()}
+                placeholder="Enter new group name..."
+                className="w-full px-4 py-2 border-2 border-gray-300 rounded-lg focus:border-green-500 focus:outline-none mb-4"
+                autoFocus
+              />
+              <div className="flex gap-2 justify-end">
+                <button
+                  onClick={() => {
+                    setShowEditGroupModal(false)
+                    setEditingGroup(null)
+                    setNewGroupName('')
+                  }}
+                  className="px-4 py-2 rounded-lg font-medium bg-gray-200 text-gray-700 hover:bg-gray-300"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={renameGroup}
+                  disabled={!newGroupName.trim()}
+                  className="px-4 py-2 rounded-lg font-medium bg-green-600 text-white hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  Rename
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Group View Modal */}
+        {selectedGroup && (
+          <div
+            className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4"
+            onClick={() => setSelectedGroup(null)}
+          >
+            <div
+              className="bg-white rounded-lg max-w-4xl w-full max-h-[90vh] overflow-y-auto"
+              onClick={(e) => e.stopPropagation()}
+            >
+              {/* Group Header */}
+              <div className="sticky top-0 bg-gradient-to-r from-amber-100 to-amber-200 border-b-2 border-amber-300 p-6">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-3">
+                    <FolderOpen className="h-8 w-8 text-amber-700" />
+                    <div>
+                      <h2 className="text-2xl font-bold text-gray-900">{selectedGroup.name}</h2>
+                      <p className="text-sm text-gray-600">
+                        {getWordsInGroup(selectedGroup.id).length} {getWordsInGroup(selectedGroup.id).length === 1 ? 'word' : 'words'}
+                      </p>
+                    </div>
+                  </div>
+                  <div className="flex gap-2">
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation()
+                        openEditGroupModal(selectedGroup)
+                        setSelectedGroup(null)
+                      }}
+                      className="p-2 rounded-lg hover:bg-amber-300 transition-colors"
+                      title="Rename group"
+                    >
+                      <Edit2 className="h-5 w-5 text-gray-700" />
+                    </button>
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation()
+                        deleteGroup(selectedGroup.id)
+                        setSelectedGroup(null)
+                      }}
+                      className="p-2 rounded-lg hover:bg-red-100 transition-colors"
+                      title="Delete group"
+                    >
+                      <Trash2 className="h-5 w-5 text-red-600" />
+                    </button>
+                    <button
+                      onClick={() => setSelectedGroup(null)}
+                      className="p-2 rounded-lg hover:bg-gray-200 transition-colors"
+                    >
+                      <X className="h-6 w-6 text-gray-700" />
+                    </button>
+                  </div>
+                </div>
+              </div>
+
+              {/* Group Content */}
+              <div className="p-6">
+                {getWordsInGroup(selectedGroup.id).length === 0 ? (
+                  <div className="text-center py-12">
+                    <FolderX className="h-16 w-16 text-gray-400 mx-auto mb-4" />
+                    <p className="text-gray-600">No words in this group yet. Drag words here to add them.</p>
+                  </div>
+                ) : (
+                  <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-4">
+                    {getWordsInGroup(selectedGroup.id).map((word) => (
+                      <div
+                        key={word.id}
+                        className="bg-white border-2 border-gray-200 rounded-lg p-4 hover:shadow-lg hover:border-green-300 transition-all cursor-pointer group relative"
+                        style={{ borderLeftWidth: '4px', borderLeftColor: word.color }}
+                      >
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation()
+                            removeWordFromGroup(word.id)
+                          }}
+                          className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity p-1 rounded-full hover:bg-amber-100"
+                          title="Remove from group"
+                        >
+                          <FolderX className="h-4 w-4 text-amber-600" />
+                        </button>
+                        <div
+                          className="text-center"
+                          onClick={() => {
+                            setSelectedWord(word)
+                          }}
+                        >
+                          <p className="text-lg font-bold text-gray-900 group-hover:text-green-600 transition-colors">
+                            {word.word}
+                          </p>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Word Detail Popup Modal */}
         {selectedWord && (
           <div
             className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4"
@@ -287,12 +787,24 @@ export default function SavedWordsPage() {
                     {selectedWord.word}
                   </span>
                 </div>
-                <button
-                  onClick={() => setSelectedWord(null)}
-                  className="text-gray-600 hover:text-gray-900 transition-colors"
-                >
-                  <X className="h-6 w-6" />
-                </button>
+                <div className="flex gap-2">
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      unsaveWord(selectedWord.id)
+                    }}
+                    className="p-2 rounded-lg hover:bg-red-100 transition-colors"
+                    title="Unsave word"
+                  >
+                    <Trash2 className="h-5 w-5 text-red-600" />
+                  </button>
+                  <button
+                    onClick={() => setSelectedWord(null)}
+                    className="text-gray-600 hover:text-gray-900 transition-colors"
+                  >
+                    <X className="h-6 w-6" />
+                  </button>
+                </div>
               </div>
 
               {/* Modal Content */}
