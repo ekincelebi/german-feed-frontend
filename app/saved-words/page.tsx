@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react'
 import Link from 'next/link'
-import { ArrowLeft, Bookmark, X, GripVertical, Folder, FolderOpen, Plus, ChevronDown, ChevronUp, Trash2, Edit2, FolderX } from 'lucide-react'
+import { ArrowLeft, Bookmark, X, Folder, FolderOpen, Plus, ChevronDown, ChevronUp, Trash2, Edit2, FolderX } from 'lucide-react'
 
 interface SavedWord {
   id: string
@@ -30,7 +30,6 @@ export default function SavedWordsPage() {
   const [wordGroups, setWordGroups] = useState<WordGroup[]>([])
   const [selectedWord, setSelectedWord] = useState<SavedWord | null>(null)
   const [selectedGroup, setSelectedGroup] = useState<WordGroup | null>(null)
-  const [isDragMode, setIsDragMode] = useState(false)
   const [draggedIndex, setDraggedIndex] = useState<number | null>(null)
   const [draggedWordId, setDraggedWordId] = useState<string | null>(null)
   const [expandGroupedWords, setExpandGroupedWords] = useState(false)
@@ -393,30 +392,17 @@ export default function SavedWordsPage() {
             </div>
             <div className="flex gap-2 flex-wrap">
               {savedWords.length > 0 && (
-                <>
-                  <button
-                    onClick={() => setIsDragMode(!isDragMode)}
-                    className={`px-4 py-2 rounded-lg font-medium transition-all inline-flex items-center gap-2 ${
-                      isDragMode
-                        ? 'bg-indigo-600 text-white hover:bg-indigo-700'
-                        : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
-                    }`}
-                  >
-                    <GripVertical className="h-5 w-5" />
-                    {isDragMode ? 'Done Reordering' : 'Reorder'}
-                  </button>
-                  <button
-                    onClick={toggleExpandGroupedWords}
-                    className={`px-4 py-2 rounded-lg font-medium transition-all inline-flex items-center gap-2 ${
-                      expandGroupedWords
-                        ? 'bg-purple-600 text-white hover:bg-purple-700'
-                        : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
-                    }`}
-                  >
-                    {expandGroupedWords ? <ChevronUp className="h-5 w-5" /> : <ChevronDown className="h-5 w-5" />}
-                    {expandGroupedWords ? 'Hide Grouped Words' : 'Show All Words'}
-                  </button>
-                </>
+                <button
+                  onClick={toggleExpandGroupedWords}
+                  className={`px-4 py-2 rounded-lg font-medium transition-all inline-flex items-center gap-2 ${
+                    expandGroupedWords
+                      ? 'bg-purple-600 text-white hover:bg-purple-700'
+                      : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+                  }`}
+                >
+                  {expandGroupedWords ? <ChevronUp className="h-5 w-5" /> : <ChevronDown className="h-5 w-5" />}
+                  {expandGroupedWords ? 'Hide Grouped Words' : 'Show All Words'}
+                </button>
               )}
               <button
                 onClick={() => setShowCreateGroupModal(true)}
@@ -458,15 +444,6 @@ export default function SavedWordsPage() {
           </div>
         ) : (
           <>
-            {isDragMode && (
-              <div className="bg-indigo-50 border-2 border-indigo-200 rounded-lg p-4 mb-4">
-                <p className="text-indigo-900 font-medium text-center">
-                  <GripVertical className="inline h-5 w-5 mr-2" />
-                  Drag and drop cards to reorder your saved words
-                </p>
-              </div>
-            )}
-
             {/* Groups Display */}
             {groupsToDisplay.length > 0 && (
               <div className="mb-6">
@@ -486,7 +463,7 @@ export default function SavedWordsPage() {
                           e.preventDefault()
                           handleDropOnGroup(group.id)
                         }}
-                        onClick={() => !isDragMode && setSelectedGroup(group)}
+                        onClick={() => setSelectedGroup(group)}
                         className={`bg-gradient-to-br from-amber-50 to-amber-100 border-2 rounded-lg p-6 transition-all cursor-pointer ${
                           dragOverGroupId === group.id
                             ? 'border-amber-500 shadow-lg scale-105'
@@ -517,42 +494,29 @@ export default function SavedWordsPage() {
                       key={word.id}
                       draggable={true}
                       onDragStart={() => handleDragStart(index, word.id)}
-                      onDragOver={(e) => isDragMode && handleDragOver(e, index)}
+                      onDragOver={(e) => handleDragOver(e, index)}
                       onDragEnd={handleDragEnd}
-                      className={`bg-white border-2 border-gray-200 rounded-lg p-6 transition-all group relative ${
-                        isDragMode
-                          ? 'cursor-move hover:border-indigo-400 hover:shadow-md'
-                          : 'cursor-grab active:cursor-grabbing hover:shadow-lg hover:border-green-300'
-                      } ${draggedIndex === index ? 'opacity-50' : ''}`}
+                      className={`bg-white border-2 border-gray-200 rounded-lg p-6 transition-all group relative cursor-grab active:cursor-grabbing hover:shadow-lg hover:border-green-300 ${
+                        draggedIndex === index ? 'opacity-50' : ''
+                      }`}
                       style={{ borderLeftWidth: '4px', borderLeftColor: word.color }}
                     >
                       {/* Unsave button */}
-                      {!isDragMode && (
-                        <button
-                          onClick={(e) => {
-                            e.stopPropagation()
-                            unsaveWord(word.id)
-                          }}
-                          className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity p-1 rounded-full hover:bg-red-100"
-                        >
-                          <Trash2 className="h-4 w-4 text-red-600" />
-                        </button>
-                      )}
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          unsaveWord(word.id)
+                        }}
+                        className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity p-1 rounded-full hover:bg-red-100"
+                      >
+                        <Trash2 className="h-4 w-4 text-red-600" />
+                      </button>
 
                       <div
                         className="text-center"
-                        onClick={() => !isDragMode && setSelectedWord(word)}
+                        onClick={() => setSelectedWord(word)}
                       >
-                        {isDragMode && (
-                          <div className="flex justify-center mb-2">
-                            <GripVertical className="h-5 w-5 text-gray-400" />
-                          </div>
-                        )}
-                        <p className={`text-lg font-bold transition-colors ${
-                          isDragMode
-                            ? 'text-gray-900'
-                            : 'text-gray-900 group-hover:text-green-600'
-                        }`}>
+                        <p className="text-lg font-bold text-gray-900 group-hover:text-green-600 transition-colors">
                           {word.word}
                         </p>
                         {expandGroupedWords && word.groupId && (
