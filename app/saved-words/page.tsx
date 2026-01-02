@@ -38,6 +38,8 @@ export default function SavedWordsPage() {
   const [newGroupName, setNewGroupName] = useState('')
   const [editingGroup, setEditingGroup] = useState<WordGroup | null>(null)
   const [dragOverGroupId, setDragOverGroupId] = useState<string | null>(null)
+  const [generatedText, setGeneratedText] = useState<string>('')
+  const [isGenerating, setIsGenerating] = useState(false)
 
   useEffect(() => {
     loadSavedWords()
@@ -272,6 +274,52 @@ export default function SavedWordsPage() {
       if (wordsInGroup.length === 0) {
         setSelectedGroup(null)
       }
+    }
+  }
+
+  const generateText = async (groupId: string) => {
+    const wordsInGroup = getWordsInGroup(groupId)
+
+    if (wordsInGroup.length === 0) {
+      return
+    }
+
+    setIsGenerating(true)
+    setGeneratedText('')
+
+    try {
+      // Format words for the API
+      const formattedWords = wordsInGroup.map(word => ({
+        phrase: word.word,
+        explanation: {
+          meaning: word.meaning,
+          grammar: word.grammar,
+          examples: {
+            original: word.example,
+            new: word.example
+          }
+        }
+      }))
+
+      const response = await fetch('/api/generate-text', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ words: formattedWords }),
+      })
+
+      if (!response.ok) {
+        throw new Error('Failed to generate text')
+      }
+
+      const data = await response.json()
+      setGeneratedText(data.text)
+    } catch (error) {
+      console.error('Error generating text:', error)
+      setGeneratedText('Failed to generate text. Please try again.')
+    } finally {
+      setIsGenerating(false)
     }
   }
 
@@ -636,7 +684,10 @@ export default function SavedWordsPage() {
         {selectedGroup && (
           <div
             className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4"
-            onClick={() => setSelectedGroup(null)}
+            onClick={() => {
+              setSelectedGroup(null)
+              setGeneratedText('')
+            }}
           >
             <div
               className="bg-white rounded-lg max-w-4xl w-full max-h-[90vh] overflow-y-auto"
@@ -660,6 +711,7 @@ export default function SavedWordsPage() {
                         e.stopPropagation()
                         openEditGroupModal(selectedGroup)
                         setSelectedGroup(null)
+                        setGeneratedText('')
                       }}
                       className="p-2 rounded-lg hover:bg-amber-300 transition-colors"
                       title="Rename group"
@@ -671,6 +723,7 @@ export default function SavedWordsPage() {
                         e.stopPropagation()
                         deleteGroup(selectedGroup.id)
                         setSelectedGroup(null)
+                        setGeneratedText('')
                       }}
                       className="p-2 rounded-lg hover:bg-red-100 transition-colors"
                       title="Delete group"
@@ -678,7 +731,10 @@ export default function SavedWordsPage() {
                       <Trash2 className="h-5 w-5 text-red-600" />
                     </button>
                     <button
-                      onClick={() => setSelectedGroup(null)}
+                      onClick={() => {
+                        setSelectedGroup(null)
+                        setGeneratedText('')
+                      }}
                       className="p-2 rounded-lg hover:bg-gray-200 transition-colors"
                     >
                       <X className="h-6 w-6 text-gray-700" />
@@ -695,36 +751,75 @@ export default function SavedWordsPage() {
                     <p className="text-gray-600">No words in this group yet. Drag words here to add them.</p>
                   </div>
                 ) : (
-                  <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-4">
-                    {getWordsInGroup(selectedGroup.id).map((word) => (
-                      <div
-                        key={word.id}
-                        className="bg-white border-2 border-gray-200 rounded-lg p-4 hover:shadow-lg hover:border-green-300 transition-all cursor-pointer group relative"
-                        style={{ borderLeftWidth: '4px', borderLeftColor: word.color }}
+                  <>
+                    {/* Generate Text Button */}
+                    <div className="mb-6">
+                      <button
+                        onClick={() => generateText(selectedGroup.id)}
+                        disabled={isGenerating}
+                        className="w-full px-6 py-3 rounded-lg font-medium transition-all inline-flex items-center justify-center gap-2 bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
                       >
-                        <button
-                          onClick={(e) => {
-                            e.stopPropagation()
-                            removeWordFromGroup(word.id)
-                          }}
-                          className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity p-1 rounded-full hover:bg-amber-100"
-                          title="Remove from group"
-                        >
-                          <FolderX className="h-4 w-4 text-amber-600" />
-                        </button>
-                        <div
-                          className="text-center"
-                          onClick={() => {
-                            setSelectedWord(word)
-                          }}
-                        >
-                          <p className="text-lg font-bold text-gray-900 group-hover:text-green-600 transition-colors">
-                            {word.word}
-                          </p>
-                        </div>
+                        {isGenerating ? (
+                          <>
+                            <svg className="animate-spin h-5 w-5" viewBox="0 0 24 24">
+                              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none"></circle>
+                              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                            </svg>
+                            Generating...
+                          </>
+                        ) : (
+                          <>
+                            <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                            </svg>
+                            Generate Practice Text
+                          </>
+                        )}
+                      </button>
+                    </div>
+
+                    {/* Generated Text Display */}
+                    {generatedText && (
+                      <div className="mb-6 bg-blue-50 border-2 border-blue-200 rounded-lg p-6">
+                        <h3 className="text-lg font-bold text-blue-900 mb-3">Generated Practice Text:</h3>
+                        <p className="text-gray-800 text-base leading-relaxed whitespace-pre-wrap">
+                          {generatedText}
+                        </p>
                       </div>
-                    ))}
-                  </div>
+                    )}
+
+                    {/* Words Grid */}
+                    <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-4">
+                      {getWordsInGroup(selectedGroup.id).map((word) => (
+                        <div
+                          key={word.id}
+                          className="bg-white border-2 border-gray-200 rounded-lg p-4 hover:shadow-lg hover:border-green-300 transition-all cursor-pointer group relative"
+                          style={{ borderLeftWidth: '4px', borderLeftColor: word.color }}
+                        >
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation()
+                              removeWordFromGroup(word.id)
+                            }}
+                            className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity p-1 rounded-full hover:bg-amber-100"
+                            title="Remove from group"
+                          >
+                            <FolderX className="h-4 w-4 text-amber-600" />
+                          </button>
+                          <div
+                            className="text-center"
+                            onClick={() => {
+                              setSelectedWord(word)
+                            }}
+                          >
+                            <p className="text-lg font-bold text-gray-900 group-hover:text-green-600 transition-colors">
+                              {word.word}
+                            </p>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </>
                 )}
               </div>
             </div>
