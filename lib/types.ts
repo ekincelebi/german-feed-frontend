@@ -96,4 +96,5 @@ export interface WordGroup {
   name: string
   createdAt: number
   order: number
+  generatedText?: string
 }

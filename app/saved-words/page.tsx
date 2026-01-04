@@ -23,6 +23,7 @@ interface WordGroup {
   name: string
   createdAt: number
   order: number
+  generatedText?: string
 }
 
 export default function SavedWordsPage() {
@@ -38,7 +39,6 @@ export default function SavedWordsPage() {
   const [newGroupName, setNewGroupName] = useState('')
   const [editingGroup, setEditingGroup] = useState<WordGroup | null>(null)
   const [dragOverGroupId, setDragOverGroupId] = useState<string | null>(null)
-  const [generatedText, setGeneratedText] = useState<string>('')
   const [isGenerating, setIsGenerating] = useState(false)
   const [isEditingWord, setIsEditingWord] = useState(false)
   const [editedWord, setEditedWord] = useState<SavedWord | null>(null)
@@ -287,7 +287,6 @@ export default function SavedWordsPage() {
     }
 
     setIsGenerating(true)
-    setGeneratedText('')
 
     try {
       // Format words for the API
@@ -316,10 +315,24 @@ export default function SavedWordsPage() {
       }
 
       const data = await response.json()
-      setGeneratedText(data.text)
+
+      // Update the group with the generated text
+      const updatedGroups = wordGroups.map(group =>
+        group.id === groupId
+          ? { ...group, generatedText: data.text }
+          : group
+      )
+      saveWordGroups(updatedGroups)
     } catch (error) {
       console.error('Error generating text:', error)
-      setGeneratedText('Failed to generate text. Please try again.')
+
+      // Save error message in the group
+      const updatedGroups = wordGroups.map(group =>
+        group.id === groupId
+          ? { ...group, generatedText: 'Failed to generate text. Please try again.' }
+          : group
+      )
+      saveWordGroups(updatedGroups)
     } finally {
       setIsGenerating(false)
     }
@@ -732,10 +745,7 @@ export default function SavedWordsPage() {
         {selectedGroup && (
           <div
             className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4"
-            onClick={() => {
-              setSelectedGroup(null)
-              setGeneratedText('')
-            }}
+            onClick={() => setSelectedGroup(null)}
           >
             <div
               className="bg-white rounded-lg max-w-4xl w-full max-h-[90vh] overflow-y-auto"
@@ -759,7 +769,6 @@ export default function SavedWordsPage() {
                         e.stopPropagation()
                         openEditGroupModal(selectedGroup)
                         setSelectedGroup(null)
-                        setGeneratedText('')
                       }}
                       className="p-2 rounded-lg hover:bg-amber-300 transition-colors"
                       title="Rename group"
@@ -771,7 +780,6 @@ export default function SavedWordsPage() {
                         e.stopPropagation()
                         deleteGroup(selectedGroup.id)
                         setSelectedGroup(null)
-                        setGeneratedText('')
                       }}
                       className="p-2 rounded-lg hover:bg-red-100 transition-colors"
                       title="Delete group"
@@ -779,10 +787,7 @@ export default function SavedWordsPage() {
                       <Trash2 className="h-5 w-5 text-red-600" />
                     </button>
                     <button
-                      onClick={() => {
-                        setSelectedGroup(null)
-                        setGeneratedText('')
-                      }}
+                      onClick={() => setSelectedGroup(null)}
                       className="p-2 rounded-lg hover:bg-gray-200 transition-colors"
                     >
                       <X className="h-6 w-6 text-gray-700" />
@@ -827,11 +832,11 @@ export default function SavedWordsPage() {
                     </div>
 
                     {/* Generated Text Display */}
-                    {generatedText && (
+                    {selectedGroup.generatedText && (
                       <div className="mb-6 bg-blue-50 border-2 border-blue-200 rounded-lg p-6">
                         <h3 className="text-lg font-bold text-blue-900 mb-3">Generated Practice Text:</h3>
                         <p className="text-gray-800 text-base leading-relaxed whitespace-pre-wrap">
-                          {generatedText}
+                          {selectedGroup.generatedText}
                         </p>
                       </div>
                     )}
