@@ -40,6 +40,8 @@ export default function SavedWordsPage() {
   const [dragOverGroupId, setDragOverGroupId] = useState<string | null>(null)
   const [generatedText, setGeneratedText] = useState<string>('')
   const [isGenerating, setIsGenerating] = useState(false)
+  const [isEditingWord, setIsEditingWord] = useState(false)
+  const [editedWord, setEditedWord] = useState<SavedWord | null>(null)
 
   useEffect(() => {
     loadSavedWords()
@@ -343,6 +345,52 @@ export default function SavedWordsPage() {
     if (selectedWord?.id === wordId) {
       setSelectedWord(null)
     }
+  }
+
+  const startEditingWord = (word: SavedWord) => {
+    setEditedWord({ ...word })
+    setIsEditingWord(true)
+  }
+
+  const cancelEditingWord = () => {
+    setEditedWord(null)
+    setIsEditingWord(false)
+  }
+
+  const saveWordEdits = () => {
+    if (!editedWord) return
+
+    // Update in localStorage
+    const highlightsKey = `highlights_${editedWord.articleId}`
+    const highlights = JSON.parse(localStorage.getItem(highlightsKey) || '[]')
+
+    const highlightIndex = highlights.findIndex((h: any) => h.id === editedWord.id)
+    if (highlightIndex !== -1) {
+      highlights[highlightIndex] = {
+        ...highlights[highlightIndex],
+        explanation: {
+          word: editedWord.word,
+          meaning: editedWord.meaning,
+          grammar: editedWord.grammar,
+          example: editedWord.example
+        }
+      }
+      localStorage.setItem(highlightsKey, JSON.stringify(highlights))
+    }
+
+    // Update in state
+    const updatedWords = savedWords.map(w =>
+      w.id === editedWord.id ? editedWord : w
+    )
+    setSavedWords(updatedWords)
+
+    // Update selected word if it's the one being edited
+    if (selectedWord?.id === editedWord.id) {
+      setSelectedWord(editedWord)
+    }
+
+    setIsEditingWord(false)
+    setEditedWord(null)
   }
 
   const toggleExpandGroupedWords = () => {
@@ -839,30 +887,66 @@ export default function SavedWordsPage() {
               {/* Modal Header */}
               <div className="sticky top-0 bg-green-100 border-b-2 border-green-200 p-6 flex items-center justify-between">
                 <div className="flex items-center gap-3">
-                  <span
-                    className="px-4 py-2 rounded-lg font-bold text-lg"
-                    style={{ backgroundColor: selectedWord.color }}
-                  >
-                    {selectedWord.word}
-                  </span>
+                  {isEditingWord && editedWord ? (
+                    <input
+                      type="text"
+                      value={editedWord.word}
+                      onChange={(e) => setEditedWord({ ...editedWord, word: e.target.value })}
+                      className="px-4 py-2 rounded-lg font-bold text-lg border-2 border-gray-300 focus:border-green-500 focus:outline-none"
+                      style={{ backgroundColor: selectedWord.color }}
+                    />
+                  ) : (
+                    <span
+                      className="px-4 py-2 rounded-lg font-bold text-lg"
+                      style={{ backgroundColor: selectedWord.color }}
+                    >
+                      {selectedWord.word}
+                    </span>
+                  )}
                 </div>
                 <div className="flex gap-2">
-                  <button
-                    onClick={(e) => {
-                      e.stopPropagation()
-                      unsaveWord(selectedWord.id)
-                    }}
-                    className="p-2 rounded-lg hover:bg-red-100 transition-colors"
-                    title="Unsave word"
-                  >
-                    <Trash2 className="h-5 w-5 text-red-600" />
-                  </button>
-                  <button
-                    onClick={() => setSelectedWord(null)}
-                    className="text-gray-600 hover:text-gray-900 transition-colors"
-                  >
-                    <X className="h-6 w-6" />
-                  </button>
+                  {isEditingWord ? (
+                    <>
+                      <button
+                        onClick={saveWordEdits}
+                        className="px-4 py-2 rounded-lg bg-green-600 text-white hover:bg-green-700 transition-colors font-medium"
+                      >
+                        Save
+                      </button>
+                      <button
+                        onClick={cancelEditingWord}
+                        className="px-4 py-2 rounded-lg bg-gray-200 text-gray-700 hover:bg-gray-300 transition-colors font-medium"
+                      >
+                        Cancel
+                      </button>
+                    </>
+                  ) : (
+                    <>
+                      <button
+                        onClick={() => startEditingWord(selectedWord)}
+                        className="p-2 rounded-lg hover:bg-green-200 transition-colors"
+                        title="Edit word"
+                      >
+                        <Edit2 className="h-5 w-5 text-green-700" />
+                      </button>
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          unsaveWord(selectedWord.id)
+                        }}
+                        className="p-2 rounded-lg hover:bg-red-100 transition-colors"
+                        title="Unsave word"
+                      >
+                        <Trash2 className="h-5 w-5 text-red-600" />
+                      </button>
+                      <button
+                        onClick={() => setSelectedWord(null)}
+                        className="text-gray-600 hover:text-gray-900 transition-colors"
+                      >
+                        <X className="h-6 w-6" />
+                      </button>
+                    </>
+                  )}
                 </div>
               </div>
 
@@ -873,9 +957,18 @@ export default function SavedWordsPage() {
                   <div className="text-sm font-semibold text-blue-900 mb-2">
                     💬 Meaning
                   </div>
-                  <div className="text-base text-gray-700">
-                    {formatText(selectedWord.meaning)}
-                  </div>
+                  {isEditingWord && editedWord ? (
+                    <textarea
+                      value={editedWord.meaning}
+                      onChange={(e) => setEditedWord({ ...editedWord, meaning: e.target.value })}
+                      className="w-full px-3 py-2 border-2 border-gray-300 rounded-lg focus:border-blue-500 focus:outline-none text-base text-gray-700 min-h-[80px]"
+                      placeholder="Enter meaning..."
+                    />
+                  ) : (
+                    <div className="text-base text-gray-700">
+                      {formatText(selectedWord.meaning)}
+                    </div>
+                  )}
                 </div>
 
                 {/* Grammar */}
@@ -883,9 +976,18 @@ export default function SavedWordsPage() {
                   <div className="text-sm font-semibold text-purple-900 mb-2">
                     ✨ Grammar
                   </div>
-                  <div className="text-base text-gray-700">
-                    {formatText(selectedWord.grammar)}
-                  </div>
+                  {isEditingWord && editedWord ? (
+                    <textarea
+                      value={editedWord.grammar}
+                      onChange={(e) => setEditedWord({ ...editedWord, grammar: e.target.value })}
+                      className="w-full px-3 py-2 border-2 border-gray-300 rounded-lg focus:border-purple-500 focus:outline-none text-base text-gray-700 min-h-[80px]"
+                      placeholder="Enter grammar information..."
+                    />
+                  ) : (
+                    <div className="text-base text-gray-700">
+                      {formatText(selectedWord.grammar)}
+                    </div>
+                  )}
                 </div>
 
                 {/* Example */}
@@ -893,9 +995,18 @@ export default function SavedWordsPage() {
                   <div className="text-sm font-semibold text-green-900 mb-2">
                     📖 Example Sentence
                   </div>
-                  <div className="text-base text-gray-700 italic">
-                    {formatText(selectedWord.example)}
-                  </div>
+                  {isEditingWord && editedWord ? (
+                    <textarea
+                      value={editedWord.example}
+                      onChange={(e) => setEditedWord({ ...editedWord, example: e.target.value })}
+                      className="w-full px-3 py-2 border-2 border-gray-300 rounded-lg focus:border-green-500 focus:outline-none text-base text-gray-700 italic min-h-[80px]"
+                      placeholder="Enter example sentence..."
+                    />
+                  ) : (
+                    <div className="text-base text-gray-700 italic">
+                      {formatText(selectedWord.example)}
+                    </div>
+                  )}
                 </div>
               </div>
             </div>
