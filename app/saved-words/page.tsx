@@ -323,16 +323,27 @@ export default function SavedWordsPage() {
           : group
       )
       saveWordGroups(updatedGroups)
+
+      // Update selectedGroup to reflect the change immediately
+      if (selectedGroup && selectedGroup.id === groupId) {
+        setSelectedGroup({ ...selectedGroup, generatedText: data.text })
+      }
     } catch (error) {
       console.error('Error generating text:', error)
 
       // Save error message in the group
+      const errorMessage = 'Failed to generate text. Please try again.'
       const updatedGroups = wordGroups.map(group =>
         group.id === groupId
-          ? { ...group, generatedText: 'Failed to generate text. Please try again.' }
+          ? { ...group, generatedText: errorMessage }
           : group
       )
       saveWordGroups(updatedGroups)
+
+      // Update selectedGroup to show error immediately
+      if (selectedGroup && selectedGroup.id === groupId) {
+        setSelectedGroup({ ...selectedGroup, generatedText: errorMessage })
+      }
     } finally {
       setIsGenerating(false)
     }
